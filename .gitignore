@@ -47,6 +47,7 @@
 # Checky Base local operational output
 /checkys-base/backups/
 /checkys-base/web/desktop-updates/latest.json
+/checkys-base/.desktop-release/
 **/pb_data/
 **/pb_data_*/
 *.db
