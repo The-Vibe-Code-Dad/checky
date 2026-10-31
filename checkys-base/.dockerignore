@@ -1,0 +1,12 @@
+**
+!web/
+!web/**
+!Caddyfile
+!web.Dockerfile
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/*.db
+**/*.db-*
+**/*.log

@@ -1,2 +1,6 @@
-pb_data
-.env
+**
+!Dockerfile
+!pb_hooks/
+!pb_hooks/**
+!pb_migrations/
+!pb_migrations/**
