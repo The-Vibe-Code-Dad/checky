@@ -251,6 +251,11 @@ base:
 - Kept exact cross-origin rejection, local HTTP defaults, and desktop bearer sync; documented deployment configuration using generic example domains only.
 - Added disposable regression checks for public origins, cookie flags, forged headers, logout, and invalid configuration; verified the existing backend security and Base/desktop sync suite.
 
+## v0052 - 2026-10-31
+- Declared an explicit shared bridge network and PocketBase alias in the CasaOS and source Compose files so imported multi-container installs retain backend name resolution.
+- Made web health check the proxied backend as well as the app page, and added CI coverage for fresh first-user creation, browser/native authentication, and a disconnected backend using the CasaOS topology.
+- Documented applying the networking correction to an existing CasaOS app while retaining its database directory and public-origin setting.
+
 desktop:
 
 ## v0001 - 2026-04-07

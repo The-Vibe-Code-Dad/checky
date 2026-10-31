@@ -89,6 +89,14 @@ After a successful publish, `latest` points to the new images. Existing installa
 
 The source-build updater scripts below manage Docker named volumes, not this CasaOS bind-mounted directory. If migrating from an older source-build installation, first stop it and back up its complete PocketBase data volume. Copy that volume's contents into the chosen CasaOS data directory before starting the new stack; do not run two PocketBase processes against the same database. An empty directory starts a fresh installation and does not import an old volume automatically.
 
+### Fixing a CasaOS 502 / missing first-user screen
+
+If the web logs say `lookup pocketbase on 8.8.8.8:53: no such host`, the web container cannot resolve the backend's Docker name. Both services must use the same **custom bridge network**, with `pocketbase` as the backend's network alias. Docker's built-in network named `bridge` does not provide this service discovery. The installer now declares a shared `checky` network explicitly, following the [multi-container CasaOS pattern](https://github.com/IceWhaleTech/CasaOS-AppStore/blob/main/Apps/Docmost/docker-compose.yml) and [Docker networking guidance](https://docs.docker.com/engine/network/#dns-services).
+
+Update the installed application's Compose configuration from the current `docker-compose.casaos.yml` and recreate both services. Preserve the existing `/DATA/AppData/checkys-base/pb_data` mapping and any public-origin setting. Remove an old `network_mode: bridge` override if the installer added one; it conflicts with the explicit `networks` configuration. Pulling images or restarting alone does not apply a Compose networking change.
+
+Open `/api/health` through the app's port `17760`, then `/api/checkys-base/session`. Both must return JSON successfully; an empty database reports `setupRequired: true` and the app shows first-user creation. The web health check now verifies the app page and proxied backend health so a broken connection is visible as an unhealthy container. No database reset is needed to fix this DNS error.
+
 ### Automatic image publishing
 
 [Publish Docker images](https://github.com/The-Vibe-Code-Dad/checky/actions/workflows/publish-images.yml) runs on every push to `main` and can also be started manually from GitHub Actions on `main`. Pull requests run validation only. Publishing waits for the backend security tests, real Base/desktop sync tests, desktop security tests, Compose validation, and web-image configuration check.
