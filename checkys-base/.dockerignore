@@ -3,6 +3,7 @@
 !web/**
 !Caddyfile
 !web.Dockerfile
+web/desktop-updates/
 **/.env
 **/.env.*
 **/*.pem

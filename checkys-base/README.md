@@ -81,7 +81,38 @@ The installation uses:
 - `/DATA/AppData/checkys-base/pb_data` on the CasaOS host for persistent database and uploaded files
 - port `17760` for the app; PocketBase port `8090` is bound only to the host's loopback interface
 
-For internet access, put the web entrypoint behind your HTTPS reverse proxy. If that proxy forwards real client addresses, set the web service's `TRUSTED_PROXY_CIDRS` to its specific trusted address or subnet. Keep direct PocketBase/admin private. The published images contain the app source, hooks, and migrations; signed desktop installers and update manifests remain a separate release channel.
+### Choose `latest` or `latestwapp`
+
+The web image has two rolling variants:
+
+| Web image tag | Contents |
+| --- | --- |
+| `ghcr.io/the-vibe-code-dad/checky-web:latest` | Base web app only |
+| `ghcr.io/the-vibe-code-dad/checky-web:latestwapp` | The same Base web app plus the selected Windows x64 installer and signed `latest.json` |
+
+In CasaOS, edit the **web** container's image tag to `latestwapp`, then pull and recreate that container. Keep the **pocketbase** image on `latest`; the backend and sync model are identical for both variants. Both web variants support AMD64 and ARM64 servers; the included desktop installer is for Windows x64.
+
+Docker downloads the EXE inside the `latestwapp` image. Each Base server then serves it at `/desktop-updates/` on its own HTTPS origin, preserving existing desktop signature, checksum, origin, and size checks. Installing a new web image also replaces its bundled desktop release. A desktop already on the bundled version will not offer a redundant update.
+
+### Downloading the installer after `git pull`
+
+Git tracks source and the release selection in `desktop-release.json`. Installers are GitHub Release assets, so a plain `git pull` does not download them. From `checkys-base/`, after pulling the source, run:
+
+```bash
+node scripts/download-desktop-release.cjs
+```
+
+The helper downloads the selected release into the ignored `.desktop-release/` directory and verifies its Ed25519 signature, expected version, file name, and installer SHA-256 before staging the files. It allows bounded HTTPS downloads only from GitHub's release asset hosts and does not use a private signing key.
+
+For a source-built stack, mount that directory using the supplied override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.desktop-updates.yml up -d --build
+```
+
+Keep using both Compose files when recreating this source-built variant. CasaOS users can simply select `latestwapp`; they do not need this source-build override or Node.js on their server.
+
+For internet access, put the web entrypoint behind your HTTPS reverse proxy. If that proxy forwards real client addresses, set the web service's `TRUSTED_PROXY_CIDRS` to its specific trusted address or subnet. Keep direct PocketBase/admin private. The `latestwapp` web variant includes the desktop release files; the `latest` web variant contains only the web app.
 
 ### Updating a CasaOS installation
 
@@ -101,7 +132,7 @@ Open `/api/health` through the app's port `17760`, then `/api/checkys-base/sessi
 
 [Publish Docker images](https://github.com/The-Vibe-Code-Dad/checky/actions/workflows/publish-images.yml) runs on every push to `main` and can also be started manually from GitHub Actions on `main`. Pull requests run validation only. Publishing waits for the backend security tests, real Base/desktop sync tests, desktop security tests, Compose validation, and web-image configuration check.
 
-The workflow builds both architectures for each image and publishes `sha-<full-commit-sha>` tags. It promotes the completed pair to `latest` only after both image builds have succeeded. Use matching commit tags for a fixed deployment. Database migrations may require restoring the corresponding backup when rolling back; switching image tags alone does not undo migrations.
+The workflow builds both architectures for each image and publishes `sha-<full-commit-sha>` tags, plus `sha-<full-commit-sha>-wapp` for the web variant with the installer. It promotes the completed images to `latest` and `latestwapp` only after all three builds have succeeded. Both web variants are tested through a fresh CasaOS stack before publication; the bundled installer is fetched through Base and checked against its signed manifest. Use matching commit tags for a fixed deployment. Database migrations may require restoring the corresponding backup when rolling back; switching image tags alone does not undo migrations.
 
 Publishing uses the repository's short-lived `GITHUB_TOKEN` with package-write permission; no personal access token or signing key is required. Action versions are pinned to commit hashes. New GHCR packages default to private, so their owner must set each package's visibility to public once before users can pull without logging in. Fork maintainers must also update the workflow's repository guard, image prefix, and installer image names for their own account.
 
@@ -278,9 +309,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish-deskto
   -ReleaseNotes "What changed in this release."
 ```
 
-The helper copies the installer to `web/desktop-updates/`, calculates its SHA-256 checksum, and signs all release metadata in `latest.json` with Ed25519. Rebuild the web container to publish the release. Installer binaries remain ignored by Git. This update signature is independent of Windows Authenticode; a Windows signing certificate is not configured in this repository.
+The helper prepares the installer and `latest.json` in `web/desktop-updates/`, calculating SHA-256 and signing the release metadata with Ed25519. Upload only those two files as assets of a `desktop-v<VERSION>` GitHub Release. Update `desktop-release.json` to select that published version, then push to `main` to build the new `latestwapp` image. This selection deliberately stays pinned until changed; an unrelated release cannot silently replace the bundled updater.
 
-Desktop 1.0.7 and later require a valid signature and HTTPS on both the manifest and same-origin installer, reject redirects, limit the manifest to 64 KB and the installer to 500 MB while reading, and verify SHA-256 before opening the installer. HTTP remains available for local checklist sync; it cannot deliver automatic updates. For the first upgrade from an older desktop, install the trusted 1.0.7 installer directly: older clients cannot enforce the new signature policy.
+Installer binaries and generated manifests remain ignored by Git and excluded from the regular web Docker context. Only the verified staging directory enters the with-app image. Keep the existing signing key private and reuse it for future releases. This update signature is independent of Windows Authenticode; a Windows signing certificate is not configured in this repository.
+
+Desktop 1.0.7 and later require a valid signature and HTTPS on both the manifest and same-origin installer, reject redirects, limit the manifest to 64 KB and the installer to 500 MB while reading, and verify SHA-256 before opening the installer. HTTP remains available for local checklist sync; it cannot deliver automatic updates. For the first upgrade from a desktop older than 1.0.7, install the [current trusted release](https://github.com/The-Vibe-Code-Dad/checky/releases/latest) directly: older clients cannot enforce the new signature policy.
 
 Connected desktop apps check this manifest quietly at startup and whenever their window is opened. A compact `Update` button appears in the desktop top-right controls only when the Base manifest advertises a version newer than the installed desktop version. Users can also run an immediate manual check from the desktop Settings page.
 

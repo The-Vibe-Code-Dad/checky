@@ -1,0 +1,8 @@
+# Optional source-build overlay after running scripts/download-desktop-release.cjs.
+services:
+  web:
+    volumes:
+      - type: bind
+        source: ./.desktop-release
+        target: /srv/desktop-updates
+        read_only: true

@@ -256,6 +256,11 @@ base:
 - Made web health check the proxied backend as well as the app page, and added CI coverage for fresh first-user creation, browser/native authentication, and a disconnected backend using the CasaOS topology.
 - Documented applying the networking correction to an existing CasaOS app while retaining its database directory and public-origin setting.
 
+## v0053 - 2026-10-31
+- Added the `latestwapp` web image variant with a verified Windows installer and signed update manifest, while keeping `latest` free of generated desktop release files; both variants use the same PocketBase image.
+- Added a pinned GitHub Release selection and bounded HTTPS downloader with signature, version, filename, redirect-host, and SHA-256 validation; private signing keys remain local.
+- Extended CI to test both CasaOS image variants and verify the installer served through Base before publishing all images. Documented CasaOS tag selection and an optional source-build download/mount step after git pull.
+
 desktop:
 
 ## v0001 - 2026-04-07

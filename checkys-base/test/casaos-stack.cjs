@@ -26,7 +26,7 @@ assert.ok(sharedNetwork, 'CasaOS requires an explicit shared bridge network and 
 const pb = config.services.pocketbase;
 const web = config.services.web;
 pb.image = 'checky-security-regression:local';
-web.image = 'checky-web-regression:latest';
+web.image = process.env.CHECKY_TEST_WEB_IMAGE || 'checky-web-regression:latest';
 pb.ports = [];
 pb.volumes = [];
 pb.tmpfs = ['/pb/pb_data:rw,size=268435456'];
@@ -51,6 +51,21 @@ const compose = args => docker(['compose', '-p', project, '-f', file, ...args]);
     const post = (route, body) => request(route, {method:'POST', headers:{'Content-Type':'application/json', Origin:url}, body:JSON.stringify(body)});
     assert.equal((await request('/')).status, 200);
     assert.equal((await request('/api/health')).status, 200);
+    const updateResponse = await request('/desktop-updates/latest.json');
+    if (process.env.CHECKY_TEST_WITH_APP === 'true') {
+      assert.equal(updateResponse.status, 200);
+      const update = await updateResponse.json();
+      const {verifyManifest} = require('../scripts/lib/desktop-update.cjs');
+      verifyManifest(update, require('../scripts/lib/update-public-key.json').publicKey);
+      assert.equal(update.version, require('../desktop-release.json').version);
+      const installer = await request(update.downloadUrl, {signal:AbortSignal.timeout(30000)});
+      assert.equal(installer.status, 200);
+      const digest = require('node:crypto').createHash('sha256').update(Buffer.from(await installer.arrayBuffer())).digest('hex');
+      assert.equal(digest, update.sha256);
+      console.log('PASS bundled installer and signed manifest served correctly through Base');
+    } else {
+      assert.equal(updateResponse.status, 404, 'Base-only image must not contain a desktop update payload');
+    }
     let session = await (await request('/api/checkys-base/session')).json();
     assert.equal(session.setupRequired, true, 'fresh database must offer first-user creation through Caddy');
     assert.equal(session.authenticated, false);
