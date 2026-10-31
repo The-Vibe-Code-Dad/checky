@@ -38,6 +38,8 @@ jobs:
         run: |
           docker build -t checky-web-regression -f checkys-base/web.Dockerfile checkys-base
           docker run --rm checky-web-regression caddy validate --config /etc/caddy/Caddyfile
+      - name: Test CasaOS first-user setup through the web entrypoint
+        run: node checkys-base/test/casaos-stack.cjs
 
   publish:
     name: Publish AMD64 and ARM64 images
