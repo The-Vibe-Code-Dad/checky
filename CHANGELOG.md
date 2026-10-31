@@ -369,6 +369,10 @@ desktop:
 ## v0031 - 2026-10-30
 - Included the desktop icon and NSIS installer source in the public source package so a fresh checkout can build installers; kept generated binaries and private signing keys excluded.
 
+## v0032 - 2026-10-31
+- Bumped the Windows desktop release to 1.0.8 and rebuilt EXE/MSI installers to include the later folder navigation and tab changes that were absent from the earlier 1.0.7 package.
+- Retained the existing signed HTTPS updater and personal/shared Base sync protocol.
+
 pocketbase:
 
 ## v0001 - 2026-04-08

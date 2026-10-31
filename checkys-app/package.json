@@ -1,7 +1,7 @@
 {
   "name": "checkys-app",
   "productName": "Checky's List",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Always-on-top checklist widget with global hotkey and file persistence",
   "main": "main.js",
   "author": "BTF",
