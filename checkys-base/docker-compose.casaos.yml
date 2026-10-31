@@ -7,6 +7,8 @@ services:
     environment:
       TZ: Etc/UTC
       CHECKY_TRUST_PROXY: "true"
+      # Set to your public https:// origin when using an HTTPS tunnel/proxy.
+      CHECKY_PUBLIC_ORIGIN: ""
     ports:
       - target: 8080
         published: "8090"

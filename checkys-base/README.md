@@ -315,3 +315,5 @@ Checklist payload validation and combined personal/shared storage quotas run ins
 
 Run `powershell -NoProfile -ExecutionPolicy Bypass -File test/test-security.ps1` from this directory to build a disposable backend and run backend security plus actual Base/desktop sync regression tests. It uses isolated data and a dynamically allocated loopback port. Run `npm test` and `npm audit` in `checkys-app` for signing/auth protocol checks and the dependency audit.
 
+Run `powershell -NoProfile -ExecutionPolicy Bypass -File test/test-session-origin.ps1` for disposable HTTP/HTTPS public-origin regressions, including tunnel-style internal HTTP, Secure cookies, rejected foreign origins, malformed configuration, and desktop bearer-token compatibility.
+
