@@ -1,0 +1,467 @@
+# Change Log
+
+This file tracks internal repo changes by area.
+
+- The `v0001`, `v0002`, `v0003` style numbers are internal change-log versions.
+- Each section keeps its own independent version sequence.
+- Only increment the section that actually changed.
+
+android:
+
+## v0001 - 2026-04-07
+- Removed archive checkboxes from the Android client surfaces.
+
+## v0002 - 2026-04-07
+- Fixed Android tab refresh behavior so the current tab stays selected after reload.
+- Prevented tab rename input taps from selecting the tab and closing the drawer.
+
+## v0003 - 2026-04-08
+- Updated Android PocketBase sync to distinguish personal `checklists` from `shared_checklists`.
+- Added collection-aware checklist references, assigned shared checklist resolution, and mixed accessible checklist browsing.
+
+## v0004 - 2026-04-08
+- Updated the shared web runtime to support hosted Checky cookie sessions without storing PocketBase passwords or auth tokens in browser storage.
+
+## v0005 - 2026-04-08
+- Fixed hosted web sign-in in the shared Android/web frontend so it creates and verifies the hosted session before unlocking the app.
+- Stopped hosted login from overwriting the submitted email with stale hidden Advanced form values.
+
+## v0006 - 2026-04-08
+- Aligned Android server URL normalization with desktop so bare hostnames like `checky.example.com` default to `https://` in both the web source and checked-in native asset copy.
+
+## v0007 - 2026-04-08
+- Renamed the Android app branding to `Checky's List`, updated the checked-in native asset copy to match, and moved the tracked project folder to `checkys-android`.
+
+## v0008 - 2026-04-08
+- Removed UTF-8 BOM bytes from the Android Gradle and source files that were breaking Gradle script parsing after the rename pass.
+- Updated Android APK output naming to use the current `androidComponents` API and escaped the app-name apostrophe correctly in `strings.xml` so `:app:assembleDebug` succeeds again.
+
+## v0009 - 2026-04-09
+- Removed the dead Android storage-picker file-path code and unused FileProvider scaffolding so the native export plugin only keeps the JSON export flow the app still uses.
+- Refactored Android `www/mobile-storage.js` into clearer runtime-context, auth, and remote-sync helper boundaries and extracted the manual sync flow into a dedicated function without changing the public storage API shape.
+
+## v0010 - 2026-04-09
+- Removed the old CasaOS wording from the Android Advanced PocketBase sync settings copy.
+
+## v0011 - 2026-04-10
+- Ignored the local Android build-home directory so debug keystore lock and analytics files stay out of Git.
+
+## v0012 - 2026-04-10
+- Allowed Android cleartext HTTP traffic so local PocketBase testing can use plain `http://` URLs.
+
+## v0013 - 2026-04-10
+- Replaced raw Android PocketBase network fetch failures with a clearer server URL, LAN IP, same-network, and firewall hint.
+
+## v0014 - 2026-07-16
+- Prevented manual sync conflicts from pulling an older server checklist over unsent local tasks.
+- Refreshed active PocketBase sessions during normal sync operations so connected devices do not silently age out after several days.
+
+## v0015 - 2026-07-16
+- Preserved stable tab and task IDs in the Android fallback client so it remains compatible with PWA merge metadata.
+
+## v0016 - 2026-07-18
+- Removed the end-of-life Android application from the repository.
+
+base:
+
+## v0001 - 2026-04-07
+- Added hosted login overrides for `checkys-base`.
+
+## v0002 - 2026-04-07
+- Fixed Checky Base API proxy routing.
+
+## v0003 - 2026-04-07
+- Hardened the hosted Checky Base auth flow.
+
+## v0004 - 2026-04-07
+- Cleaned up hosted Checky Base docs and environment setup.
+
+## v0005 - 2026-04-07
+- Refreshed hosted login branding, favicon usage, default hosted port `17760`, and related docs.
+
+## v0006 - 2026-04-07
+- Fixed hosted sign-in persistence and current-origin sync after the hosted port change.
+
+## v0007 - 2026-04-08
+- Documented hosted storage preset fields and how to manage them from the PocketBase admin dashboard.
+
+## v0008 - 2026-04-08
+- Switched hosted Checky sign-in to a base-managed session cookie flow and added hosted sign-out UI that avoids saving PocketBase passwords or auth tokens in browser storage.
+
+## v0009 - 2026-04-08
+- Added hosted login throttling requirements for the new base-managed sign-in flow with progressive retry waits.
+
+## v0010 - 2026-04-08
+- Made the hosted `checkys-base` sign-in override confirm the session cookie before reloading into the app.
+
+## v0011 - 2026-04-08
+- Documented that hosted `checkys-base` sign-in now uses an opaque server-backed session cookie instead of exposing a PocketBase auth token in the browser cookie.
+
+## v0012 - 2026-04-08
+- Added anti-framing and basic browser hardening headers to the hosted `checkys-base` web entrypoint.
+
+## v0013 - 2026-04-08
+- Scoped hosted `checkys-base` browser hardening headers to the web app surface so `/api/*` stays a clean app-facing PocketBase proxy for Android and desktop clients.
+
+## v0014 - 2026-04-08
+- Blocked hosted `checkys-base` requests to `/_/` on the web entrypoint so PocketBase admin stays direct on `8090` instead of falling into the app shell.
+
+## v0015 - 2026-04-08
+- Removed the hosted web entrypoint SPA catch-all fallback so unknown `checkys-base` paths now return `404` instead of loading the app shell.
+
+## v0016 - 2026-04-08
+- Renamed the hosted deployment package branding and tracked folder to `checkys-base`, including the hosted override asset filenames and Docker references.
+
+## v0017 - 2026-04-08
+- Moved the hosted `checkys-base` override bootstrap ahead of the shared web runtime so refreshes keep the app shell hidden until hosted session state is known.
+- Hid the hosted checklist UI whenever the sign-in overlay is active so refresh and sign-out no longer expose stale app content behind the login gate.
+
+## v0018 - 2026-04-09
+- Documented that the first hosted Checky's List user becomes the hosted app admin on a fresh stack while PocketBase superusers stay separate and manual.
+
+## v0019 - 2026-04-09
+- Updated the hosted `checkys-base` docs so the first hosted bootstrap user is documented as both the initial hosted app admin and the initial PocketBase superuser.
+
+## v0020 - 2026-04-09
+- Reworked the root GitHub README into an app overview with Android, sync, and Checky Base quick-start guidance.
+
+## v0021 - 2026-04-09
+- Simplified the Checky Base first-admin setup screen copy, removed the PocketBase admin shortcut buttons, and centered the larger hosted setup form.
+
+## v0022 - 2026-04-10
+- Renamed the Checky Base first-admin setup button to `Create` and reinforced the centered setup-only form styling.
+
+## v0023 - 2026-04-10
+- Made `checkys-base/` self-contained by bundling the hosted web asset snapshot and PocketBase Dockerfile, hooks, and migrations inside the base folder.
+- Updated the hosted Docker build contexts so CasaOS can build from only `checkys-base/`.
+
+## v0024 - 2026-07-16
+- Turned the hosted web app into an installable PWA with square icons and an offline application-shell cache.
+- Added safe authenticated startup and reconnect sync.
+- Added stable tab/task IDs, last-synced base snapshots, and a confirmation preview that merges only newly created offline tasks into a newer server checklist.
+
+## v0025 - 2026-07-16
+- Moved the PWA checklist selector into the main Settings view and made accessible personal/shared lists load automatically when Settings opens.
+
+## v0026 - 2026-07-18
+- Made `checkys-base/web/` the canonical hosted frontend source instead of a copied Android snapshot.
+- Added container health checks, graceful PocketBase shutdown, and a safe stopped-volume backup helper.
+- Added a hosted desktop-update manifest and publishing helper so Base can serve versioned Windows installers and checksums.
+- Updated project direction and operations documentation for the Base-first, Android-EOL product direction.
+
+## v0027 - 2026-07-18
+- Fixed the Compose project and PocketBase volume names so Base updates keep using the existing database even when the deployment folder is renamed.
+- Added a guarded Base updater that creates a pre-update backup, rebuilds without deleting the data volume, and waits for both services to become healthy.
+- Fixed updater backup handling when a data volume exists but no PocketBase container has been created yet.
+- Removed remaining Android-source dependencies and updated repository documentation after deleting the end-of-life client.
+
+## v0028 - 2026-07-18
+- Documented the successfully tested Base backup, rebuild, named-volume reuse, health-check, and endpoint verification workflow.
+- Documented the Base-hosted desktop installer contract, including same-origin delivery, size limits, and SHA-256 verification.
+- Made the desktop update publisher write strict UTF-8 JSON without a BOM so Electron can parse hosted release manifests reliably.
+- Published and verified the hosted `1.0.0` Windows installer baseline against its generated SHA-256 manifest.
+
+## v0029 - 2026-07-18
+- Documented desktop release checks at startup/window opening, the manual Settings check, and the conditional top-right update control backed by the Base release manifest.
+
+## v0030 - 2026-07-19
+- Remembered each hosted PWA user's last opened checklist across sign-out and sign-in instead of falling back to the personal checklist.
+- Bumped the PWA application-shell cache so installed clients receive the corrected checklist-selection behavior.
+
+## v0031 - 2026-07-19
+- Tightened public-repository ignore rules for local environment files, credentials, signing keys, PocketBase data and SQLite sidecars, logs, backups, installers, and generated release archives while preserving publishable environment examples.
+
+## v0032 - 2026-07-19
+- Added Linux Bash equivalents for safe PocketBase backups, guarded Base updates with database-volume preservation and health checks, and publishing Windows desktop installers from a Linux Base host.
+- Documented the Linux and Windows maintenance commands side by side.
+
+## v0033 - 2026-07-22
+- Saved checkbox toggles immediately so a refresh cannot discard the checked state before it reaches local storage and the Base sync queue.
+
+## v0034 - 2026-07-22
+- Published the Checky's List desktop `1.0.2` installer through the Base update channel with a fresh SHA-256 manifest and checkbox-sync release notes.
+
+## v0035 - 2026-07-22
+- Packaged the verified desktop `1.0.2` installer and update manifest as an offline transfer bundle for deployment to an isolated Checky Base host.
+
+## v0036 - 2026-07-22
+- Published the Checky's List desktop `1.0.3` installer through the Base update channel with a fresh SHA-256 manifest and release notes for the updater and Instructions fixes.
+
+## v0037 - 2026-07-23
+- Made Base updates discover and reuse legacy PocketBase volumes containing `data.db`, with explicit volume overrides and an ambiguity stop so upgrades cannot silently attach an empty database and hide existing admin/user credentials.
+
+## v0038 - 2026-07-23
+- Made PocketBase volume inspection fail closed when the Docker helper cannot run, including offline missing-image failures.
+- Rejected explicit Base data-volume overrides unless the named volume already exists and contains a non-empty `data.db`.
+- Kept the Linux updater in BOM-free UTF-8 so its executable shebang remains valid.
+
+## v0039 - 2026-07-23
+- Documented the PocketBase built-in rate limiting enabled for hosted and desktop API authentication.
+
+## v0040 - 2026-07-23
+- Replaced raw hosted login and first-user exception details with fixed client-safe messages while retaining server-side bootstrap logging.
+
+## v0041 - 2026-07-23
+- Published the rebuilt Checky's List desktop `1.0.4` EXE through the Base update channel so installed `1.0.3` clients can receive the reconnect, authenticated-update, Done-archive restore, and backup validation fixes.
+- Packaged the 1.0.4 installer and manifest as a private offline transfer bundle for deployment to the Checky Base host.
+
+## v0042 - 2026-07-23
+- Made hosted sync infer unsynced local changes from the last-synced checklist snapshot instead of trusting only the dirty flag.
+- Kept the just-pushed local checklist on screen instead of immediately pulling a potentially older server response over it.
+- Saved hosted task text immediately on edit and bumped the PWA cache so installed clients receive the correction.
+## v0043 - 2026-07-24
+- Published the Checky's List desktop `1.0.5` EXE through the Base update channel with a fresh SHA-256 manifest and sync-versioning release notes.
+
+## v0044 - 2026-08-06
+- Published the Checky's List desktop `1.0.6` EXE through the Base update channel with a fresh SHA-256 manifest and release notes for startup reconnect and connection-loss notifications.
+
+## v0045 - 2026-10-30
+- Moved checklist selection from Settings into a folder dropdown above Tabs, grouped into Personal and Shared with the current checklist marked Open.
+- Opened checklists directly when selected, refreshed available lists from navigation and successful syncs, and kept the current checklist and choices intact when opening or refreshing fails.
+- Bumped the PWA application-shell cache for the updated navigation.
+
+## v0046 - 2026-10-30
+- Updated the hosted stack to PocketBase 0.41.1, Caddy 2.11.7, and Alpine 3.24.3, including the upstream PocketBase download location and backup helper images.
+- Routed hosted login through native PocketBase password/MFA authentication and bound opaque cookies to the user's credentials and auth policy, so password changes and policy changes revoke old sessions.
+- Enforced checklist format and combined storage quotas in record transactions, including collection-ID and batch writes; fixed shared assignment revocation and repaired missing schema fields without merging personal/shared collections.
+- Preserved client IPs through an explicitly trusted proxy chain, replacing the shared-proxy login lockout path. Added HTTPS-only, Ed25519-signed desktop update publishing with bounded downloads.
+- Verified fresh installation, an upgrade preserving 0.36.8 checklist data, full password/OTP authentication, quota races, proxy isolation, and real Base/desktop sync and conflict handling. Added a disposable backend regression runner and updated deployment/release instructions.
+
+## v0047 - 2026-10-30
+- Made Personal and Shared independently collapsible folders in the checklist dropdown, with the current checklist's folder expanded initially and folder choices preserved through refreshes and switches.
+- Added keyboard-accessible folder controls and bumped the PWA application-shell cache.
+
+## v0048 - 2026-10-30
+- Replaced the separate checklist dropdown with Personal and Shared folder rows in the tab colors, using disclosure triangles and placing the active checklist's actual tabs underneath.
+- Added folder reordering by dragging or arrow buttons and retained tab dragging within each checklist.
+- Added Edit > Always show to keep chosen tabs above the folders and reopen their checklist when needed; saved navigation preferences per account on this device.
+- Bumped the PWA application-shell cache and verified folder navigation, keyboard controls, reordering, pin/unpin, reload persistence, and failed-switch recovery.
+
+## v0049 - 2026-10-30
+- Prepared the canonical Base sources and deployment scripts for a clean public source repository, excluding local data, secrets, installers, and generated release manifests.
+- Clarified that a hosted desktop update channel is prepared separately with the signing publisher.
+
+desktop:
+
+## v0001 - 2026-04-07
+- Removed archive checkboxes from the desktop client surfaces.
+
+## v0002 - 2026-04-08
+- Updated desktop PocketBase sync to support separate personal and shared checklist collections.
+- Added collection-aware checklist references and assigned shared checklist resolution for desktop sync.
+
+## v0003 - 2026-04-08
+- Renamed the desktop app branding to `Checky's List`, switched the tracked project folder to `checkys-app`, and updated the Windows packaging identifiers and artifact naming to the new scheme.
+
+## v0004 - 2026-04-08
+- Renamed the desktop packaging output folder from `checky-package` to `checkys-package` so future packaged builds follow the `checkys-*` naming scheme too.
+
+## v0005 - 2026-04-08
+- Reset the desktop package version to `1.0.0` for the Checky's List Windows build and kept the packaged artifact naming on the `checkys-list-*` scheme.
+
+## v0006 - 2026-04-08
+- Restored Electron single-instance locking so launching Checky's List again now focuses the existing desktop window instead of opening a second app instance.
+
+## v0007 - 2026-07-16
+- Prevented manual sync conflicts from pulling an older server checklist over unsent local tasks.
+- Refreshed active PocketBase sessions during normal sync operations so connected desktops do not silently age out after several days.
+
+## v0008 - 2026-07-16
+- Preserved stable tab and task IDs in the desktop client so it remains compatible with PWA merge metadata.
+
+## v0009 - 2026-07-18
+- Added a confirmation preview that safely merges only newly created offline desktop tasks into a newer server checklist.
+- Added a manual desktop update checker that reads release information and opens downloads from the connected Checky Base server.
+- Updated desktop documentation to describe its current hosted sync and update behavior.
+
+## v0010 - 2026-07-18
+- Upgraded the Base-backed desktop updater to download installers inside Electron, enforce same-origin hosting and a 500 MB limit, verify SHA-256, launch the verified Windows installer, and close the app for installation.
+- Verified that the updater-enabled desktop application packages successfully as both NSIS and MSI.
+
+## v0011 - 2026-07-18
+- Added quiet desktop update checks at startup and whenever the window is opened, without periodic background polling.
+- Kept an explicit `Check for updates` button in Settings for immediate on-demand checks.
+- Added a compact top-right `Update` button that appears only when the connected Base server advertises a newer desktop version and reuses the verified installer flow.
+
+## v0012 - 2026-07-19
+- Bumped the Windows desktop application version to `1.0.1` for the new packaged installer.
+
+## v0013 - 2026-07-22
+- Saved checkbox toggles immediately to keep desktop behavior compatible with the corrected Base sync flow.
+
+## v0014 - 2026-07-22
+- Bumped the Windows desktop application to `1.0.2` and built fresh NSIS and MSI installers.
+
+## v0015 - 2026-07-22
+- Fixed desktop update installation when Electron omits the final response URL, while preserving the same-origin redirect check against the already validated Base installer URL.
+- Rebuilt the Windows NSIS and MSI `1.0.2` installers with the corrected updater flow.
+
+## v0016 - 2026-07-22
+- Packaged the desktop instructions README with installed builds and fixed the Instructions button to open that deployed resource.
+- Bumped the Windows desktop application to `1.0.3` for the corrected instructions build.
+
+## v0017 - 2026-07-23
+- Made the desktop Connect action clear stale saved authentication and checklist-selection state before signing in again, so reconnecting no longer requires a separate Disconnect step.
+
+## v0018 - 2026-07-23
+- Required a successful authenticated Checky Base user request before desktop update manifests can be checked or installers downloaded.
+- Made checklist backup restore automatically re-enable the Done archive when the restored backup contains completed items.
+
+## v0019 - 2026-07-23
+- Bumped the Windows desktop application to `1.0.4` and built fresh NSIS EXE and MSI installers containing the reconnect, authenticated-update, and Done-archive restore fixes.
+
+## v0020 - 2026-07-23
+- Routed Connect through one protected reconnect path so a pending checklist selection cannot bypass the fresh authentication reset.
+- Added an explicit confirmation before Connect clears sync state when local checklist changes have not reached Checky Base.
+
+## v0021 - 2026-07-23
+- Rebuilt the Windows desktop `1.0.4` NSIS EXE and MSI installers so they include the protected Connect flow and unsynced-work warning.
+
+## v0022 - 2026-07-23
+- Restricted checklist backup restore to existing JSON files returned by the desktop backup list, blocking invalid names and paths outside the backup folder.
+- Rebuilt the Windows desktop 1.0.4 NSIS EXE and MSI installers with the backup restore protection.
+
+## v0023 - 2026-07-23
+- Made sync infer unsynced local edits from the last-synced checklist snapshot when the dirty flag is stale.
+- Kept the successfully pushed local checklist on screen instead of immediately pulling an older server copy over freshly edited task text.
+## v0024 - 2026-07-24
+- Bumped the Windows desktop application to `1.0.5` and built fresh NSIS EXE and MSI installers containing the sync-versioning fix.
+
+## v0025 - 2026-08-06
+- Reconnected desktop sync automatically at app startup by refreshing the saved Checky Base session and reopening the previously selected checklist.
+- Kept the cached checklist open when refresh cannot reach the server and added a clear connection-loss popup for user-requested refreshes.
+
+## v0026 - 2026-08-06
+- Bumped the Windows desktop application to `1.0.6` for the startup reconnect and connection-loss notification build.
+
+## v0027 - 2026-10-30
+- Moved the connected checklist picker from Advanced settings to a folder dropdown above the tabs, matching Base's Personal and Shared groups and direct opening behavior.
+- Loaded checklist choices after successful syncs and preserved the current checklist when switching or refreshing fails.
+
+## v0028 - 2026-10-30
+- Updated Electron to 45.2.1 and electron-builder to 26.18.0, pinned patched transitive build dependencies, and bumped the desktop release to 1.0.7. npm audit reports zero known vulnerabilities.
+- Added native PocketBase MFA verification-code prompts using the same authentication flow as Base.
+- Required a pinned Ed25519 release signature, HTTPS, same-origin installers, bounded response sizes, and matching SHA-256 before launching automatic updates; rejected redirects and unsigned metadata.
+- Built Windows EXE/MSI installers and verified personal/shared sync, device overrides, assignment changes, and protection against stale writes with the real client sync implementations.
+
+## v0029 - 2026-10-30
+- Matched Base's independently collapsible Personal and Shared folders, preserving expansion choices through refreshes and checklist switches and supporting keyboard activation.
+
+## v0030 - 2026-10-30
+- Matched Base's tab-colored Personal and Shared folder navigation with nested tabs, folder reordering, and Edit > Always show for persistent shortcuts above collapsed folders.
+- Preserved tab dragging across the folder and always-shown areas, and kept tab editing open while interacting with its Always show checkbox.
+
+## v0031 - 2026-10-30
+- Included the desktop icon and NSIS installer source in the public source package so a fresh checkout can build installers; kept generated binaries and private signing keys excluded.
+
+pocketbase:
+
+## v0001 - 2026-04-08
+- Added hosted checklist size settings storage through the `checky_base_settings` collection.
+
+## v0002 - 2026-04-08
+- Split hosted storage settings into `perUserChecklistSizePreset` and `databaseChecklistSizePreset`.
+- Kept legacy preset fallback handling for older installs.
+
+## v0003 - 2026-04-08
+- Separated personal and shared checklist storage between `checklists` and `shared_checklists`.
+- Added `users.assignedSharedChecklist` for shared checklist assignment.
+
+## v0004 - 2026-04-08
+- Enforced Checky checklist JSON validation plus per-user and total hosted checklist size limits in PocketBase hooks.
+- Added the shared-checklist access sync hook and updated PocketBase backend docs for the new model.
+
+## v0005 - 2026-04-08
+- Added a repair migration to backfill `perUserChecklistSizePreset` and `databaseChecklistSizePreset` when a PocketBase install still only has the legacy `checklistSizePreset` field.
+
+## v0006 - 2026-04-08
+- Added hosted session cookie routes and cookie-backed auth loading for `checkys-base` so hosted web requests can authenticate without browser-stored PocketBase tokens.
+
+## v0007 - 2026-04-08
+- Added persistent hosted login guard storage and progressive failed-sign-in backoff handling with 1, 5, 10, 30, and 60 minute waits.
+
+## v0008 - 2026-04-08
+- Hardened hosted session cookie auth middleware path detection so signed-in browser requests are recognized more reliably across request URL shapes.
+
+## v0009 - 2026-04-08
+- Fixed hosted session cookie reads in the PocketBase hook to use the request cookie API so sign-in confirmation can see the browser session.
+
+## v0010 - 2026-04-08
+- Replaced hosted browser cookies that stored raw PocketBase auth tokens with opaque server-backed sessions in `checky_base_sessions`.
+- Added explicit hosted session expiry, `SameSite=Lax` cookies, session refresh, logout revocation, and legacy-cookie migration into the new session store.
+
+## v0011 - 2026-04-08
+- Fixed hosted session request-state caching to use PocketBase's request store instead of attaching custom properties to the request event, which was breaking hosted session routes.
+
+## v0012 - 2026-04-08
+- Hardened hosted session routes to return normal JSON failures instead of generic PocketBase 400 errors when hosted session state breaks.
+- Added runtime self-healing for missing `checky_base_login_guards` and `checky_base_sessions` collections so hosted sign-in can recover more gracefully after partial deploys.
+
+## v0013 - 2026-04-08
+- Reworked hosted auth middleware and hosted session routes to use self-contained PocketBase callbacks after the route runtime failed to resolve outer helper bindings.
+- Fixed hosted `/api/checkys-base/session`, `/session/login`, and `/session/logout` to return normal JSON responses instead of crashing with generic `400` errors.
+
+## v0014 - 2026-04-08
+- Exempted loopback localhost IPs from the hosted login IP backoff key so local hosted testing does not lock out every retry on the same machine.
+
+## v0015 - 2026-04-08
+- Disabled hosted login throttling for loopback or localhost-hosted clients so local sign-in testing is not blocked by stale identity backoff entries during development.
+
+## v0016 - 2026-04-08
+- Changed hosted login throttling so the first three failed sign-in attempts return a normal incorrect-password message and timeout backoff starts on the fourth failure.
+
+## v0017 - 2026-04-08
+- Removed the hosted login throttle bypass based on localhost host headers so public `checkys-base` deployments always enforce login backoff.
+
+## v0018 - 2026-04-08
+- Locked `users.assignedSharedChecklist` against self-service updates so shared checklist assignment stays admin-controlled while personal checklist creation remains automatic.
+
+## v0019 - 2026-04-08
+- Blocked normal users from creating extra shared checklists and limited direct personal checklist creation to the single automatic personal record bootstrap case.
+- Updated shared checklist assignment syncing so moving or clearing an assigned shared checklist removes the prior assignment-driven access entry.
+
+## v0020 - 2026-04-08
+- Refactored PocketBase checklist/user hooks to use self-contained runtime callbacks after helper-scope failures were breaking user bootstrap and shared-access sync.
+- Fixed shared checklist assignment updates to read the previous user record with `originalCopy()`.
+- Normalized checklist payload validation so request-time JSON values can be validated when PocketBase exposes them as objects, strings, or byte arrays.
+
+## v0021 - 2026-04-08
+- Removed the unused hosted `/api/checkys-base/setup` route after the web client switched to the session endpoint for setup state.
+- Deleted the dead top-level hosted-session helper block from the PocketBase bridge hook and documented why the remaining session helpers stay route-local in PocketBase JSVM.
+
+## v0022 - 2026-04-08
+- Restored hosted session refresh on active requests by extending `expiresAt`, updating `lastSeenAt`, and reissuing the session cookie when a hosted session nears expiry.
+- Replaced the duplicated hosted checklist size hook with one shared validation path and a UTF-8-safe byte-array decoder so larger valid payloads no longer fail before the configured size limits.
+
+## v0023 - 2026-04-08
+- Renamed the hosted PocketBase bridge hook and public hosted route namespace to `checkys-base` so the backend matches the new app and folder naming scheme.
+
+## v0024 - 2026-04-09
+- Replaced the hosted checklist size guard request hooks with self-contained PocketBase middleware after JSVM hook rejections were returning silent `200` no-op writes instead of normal API validation errors.
+- Restored explicit `400` JSON validation failures for invalid or oversized checklist writes while keeping normal user, personal checklist, and shared checklist writes working.
+
+## v0025 - 2026-04-09
+- Added a private `checky_base_admins` app-admin collection so the first hosted user becomes the hosted app admin without relying on a mutable `users` auth field.
+- Updated hosted session, hosted login, first-user bootstrap, and shared-checklist create checks to use the new app-admin assignment.
+- Narrowed the hosted checklist-size middleware so it no longer rewrites unrelated user-management request failures into checklist validation errors.
+
+## v0026 - 2026-04-09
+- Changed the hosted first-user bootstrap to create the first PocketBase `_superusers` account with the same starting email and password as the first hosted app user.
+- Updated hosted setup detection so the first-user screen is driven by the Checky Base app-admin assignment.
+
+## v0027 - 2026-04-09
+- Removed the CasaOS-specific PocketBase Docker Compose files, CasaOS compose metadata, and CasaOS setup docs.
+- Fixed the hosted bootstrap override so `_superusers` records no longer suppress the first-user Checky Base admin bootstrap.
+- Made the first-user bootstrap app-admin assignment prefer the newly created hosted user so the starting Checky Base admin and PocketBase superuser stay aligned.
+
+## v0028 - 2026-07-23
+- Enabled PocketBase's built-in rate limiter while preserving administrator-defined rules and adding missing standard limits for authentication, record creation, batch requests, and general API traffic.
+
+## v0029 - 2026-07-23
+- Stopped hosted authentication and first-user routes from returning internal PocketBase exception details to public clients.
+
+
+## v0030 - 2026-10-30
+- Updated the standalone image to PocketBase 0.41.1 and Alpine 3.24.3, and bound its direct port to loopback by default.
+- Mirrored Base's native-auth cookie bridge, credential/policy session revocation, transactional checklist quotas, shared-access revocation, schema repair, and standard rate-limit migration.
+- Verified an isolated 0.36.8-to-0.41.1 upgrade retains personal/shared checklist JSON, versions, assignments, and authentication; retained backup-and-restore rollback guidance.

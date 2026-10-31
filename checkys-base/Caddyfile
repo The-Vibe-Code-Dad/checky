@@ -1,0 +1,43 @@
+{
+  auto_https off
+  servers {
+    trusted_proxies static {$TRUSTED_PROXY_CIDRS:127.0.0.1/32 ::1/128}
+    trusted_proxies_strict
+    client_ip_headers X-Forwarded-For
+  }
+}
+
+:80 {
+  encode gzip zstd
+
+  route {
+    @pocketbase path /api /api/*
+    handle @pocketbase {
+      reverse_proxy pocketbase:8080 {
+        header_up X-Checky-Client-IP {client_ip}
+      }
+    }
+
+    @pocketbaseAdmin path /_/ /_/*
+    handle @pocketbaseAdmin {
+      respond "Not Found" 404
+    }
+
+    handle {
+      @desktopUpdateManifest path /desktop-updates/latest.json
+      header @desktopUpdateManifest Cache-Control "no-store, max-age=0"
+
+      @desktopUpdateFile path /desktop-updates/*.exe /desktop-updates/*.msi
+      header @desktopUpdateFile Content-Disposition "attachment"
+
+      header {
+        X-Frame-Options "DENY"
+        Content-Security-Policy "frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+      }
+      root * /srv
+      file_server
+    }
+  }
+}

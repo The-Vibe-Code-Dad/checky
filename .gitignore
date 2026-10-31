@@ -1,0 +1,70 @@
+# Private release artifacts
+/1-dont not share/
+/checkys-package/
+/checklist.zip
+/checkys-list.zip
+/bak up/
+/AGENTS.md
+
+# Dependencies
+**/node_modules/
+
+# Electron build output
+/checkys-app/build/*
+!/checkys-app/build/icon.ico
+!/checkys-app/build/installer.nsh
+
+# Local tool state
+/tmp-checky-data.db
+
+# Local environment, credentials, and signing files
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+**/.npmrc
+**/.pypirc
+**/credentials.json
+**/*-credentials.json
+**/service-account*.json
+**/google-services.json
+*.pem
+*.key
+*.kdbx
+*.jks
+*.keystore
+*.p12
+*.pfx
+
+# Generated app binaries
+*.apk
+*.aab
+*.ap_
+*.blockmap
+*.exe
+*.msi
+
+# Checky Base local operational output
+/checkys-base/backups/
+/checkys-base/web/desktop-updates/latest.json
+**/pb_data/
+**/pb_data_*/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.log
+
+# Generated release archives
+*.7z
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+
+# Editor / OS noise
+**/.DS_Store
+**/Thumbs.db
+**/.idea/
+**/.vscode/

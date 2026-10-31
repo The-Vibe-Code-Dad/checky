@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https: http:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-src 'none'; frame-ancestors 'none';">
+  <meta name="theme-color" content="#1f1f1f">
+  <title>Checky's List</title>
+  <link rel="icon" type="image/png" href="./logo.png">
+  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./checkys-base.css">
+</head>
+  <body>
+  <div id="app">
+    <div class="topbar">
+      <button class="nav-toggle" id="navToggle" aria-label="Open navigation menu">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+      <div class="brand">
+        <img src="./logo.png" alt="Checky's List logo" class="brand-logo">
+        <div class="title">Checky's List</div>
+      </div>
+      <div class="topbar-spacer" aria-hidden="true"></div>
+    </div>
+
+    <div id="navBackdrop" class="nav-backdrop hidden"></div>
+    <aside id="navDrawer" class="nav-drawer hidden" aria-hidden="true">
+      <div class="nav-drawer-header">
+        <div class="nav-header-actions">
+          <button class="btn btn-ghost nav-icon-only" id="doneToggle" aria-label="Open done list" title="Done list">
+            <span class="nav-icon" aria-hidden="true">&#9745;</span>
+          </button>
+          <button class="btn btn-ghost nav-icon-only" id="settingsToggle" aria-label="Open settings" title="Settings">
+            <span class="nav-icon" aria-hidden="true">&#9881;</span>
+          </button>
+          <button class="btn btn-ghost nav-close" id="navCloseBtn" aria-label="Close navigation menu">Close</button>
+        </div>
+      </div>
+
+      <div class="nav-section">
+        <div id="checklistNavigation" class="checklist-navigation">
+          <div class="tab-navigation-header">
+            <span>Tabs</span>
+            <button id="refreshChecklistsBtn" class="btn btn-ghost" type="button" title="Refresh checklists" aria-label="Refresh checklists">&#10227;</button>
+          </div>
+          <div id="alwaysVisibleTabs" class="tabs nav-tabs always-visible-tabs" role="group" aria-label="Always shown tabs"></div>
+          <div id="checklistFolders" class="tab-folders"></div>
+          <div id="checklistTabPanel" class="checklist-tab-panel">
+            <div class="tabs nav-tabs" id="tabs"></div>
+            <div class="row-actions">
+              <button class="btn btn-primary nav-add-tab" id="addTabBtn">+ Tab</button>
+            </div>
+          </div>
+          <div id="availableChecklistsStatus" class="hint checklist-navigation-status" role="status" aria-live="polite"></div>
+        </div>
+
+      </div>
+    </aside>
+
+    <div class="content-scroll" id="contentScroll">
+      <div id="pullSyncIndicator" class="pull-sync-indicator" aria-hidden="true">
+        <div id="pullSyncLabel" class="pull-sync-label">Pull down to sync</div>
+      </div>
+
+      <section id="specialViewHeader" class="special-view-header hidden">
+        <div class="special-view-copy">
+          <div class="view-summary-label">View</div>
+          <div class="view-summary-title" id="specialViewTitle"></div>
+        </div>
+        <button class="btn btn-ghost special-view-close" id="specialViewCloseBtn">Close</button>
+      </section>
+
+      <section id="settingsPanel" class="settings hidden">
+        <div class="setting-row">
+          <label>Sync</label>
+          <div class="path" id="dataLocation"></div>
+          <div class="inline">
+            <button id="syncNowBtn" class="btn btn-primary">Pull latest</button>
+          </div>
+          <div class="hint">Checklist changes stay cached on this device. When PocketBase is configured below, edits push in the background and `Pull latest` or pull-to-refresh fetches the checklist assigned to this PocketBase user.</div>
+        </div>
+
+        <div class="setting-row">
+          <label>Safety copy</label>
+          <div class="path" id="syncRestorePointSummary">No pre-sync backup yet</div>
+          <div class="inline">
+            <button id="restoreSyncRestorePointBtn" class="btn btn-ghost" type="button">Restore backup</button>
+          </div>
+          <div class="hint">A local restore point is saved before each manual sync so you can recover quickly if the pulled checklist is not what you expected.</div>
+        </div>
+
+        <div class="setting-row toggle-row">
+          <label><input id="showDoneTab" type="checkbox"> Show Done archive</label>
+        </div>
+
+        <div class="setting-row">
+          <button id="advancedSettingsToggle" class="btn btn-ghost advanced-toggle" type="button" aria-expanded="false">
+            <span>Advanced</span>
+            <span id="advancedSummary" class="advanced-summary">No server configured</span>
+          </button>
+          <div id="advancedSettingsPanel" class="advanced-panel hidden">
+            <div class="hint">PocketBase connection settings for the checklist assigned to this PocketBase user. Email, password, and auth token stay on this device.</div>
+
+            <div class="setting-row">
+              <label for="serverUrlInput">PocketBase URL</label>
+              <input id="serverUrlInput" type="url" inputmode="url" placeholder="https://checky.yourdomain.com" autocomplete="url">
+            </div>
+
+            <div class="setting-row">
+              <label for="syncEmailInput">Login email</label>
+              <input id="syncEmailInput" type="email" inputmode="email" placeholder="you@example.com" autocomplete="username">
+            </div>
+
+            <div class="setting-row">
+              <label for="syncPasswordInput">Password</label>
+              <input id="syncPasswordInput" type="password" placeholder="Enter PocketBase password" autocomplete="current-password">
+            </div>
+
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="inline">
+            <button id="exportChecklistBtn" class="btn btn-primary">Export JSON</button>
+            <label class="btn btn-ghost file-btn">
+              Import JSON
+              <input id="importChecklistInput" type="file" accept="application/json">
+            </label>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <button id="resetChecklistBtn" class="btn btn-danger">Reset checklist</button>
+        </div>
+        <div id="settingsStatus" class="hint"></div>
+      </section>
+
+      <section class="view-summary">
+        <div class="view-summary-label">Current view</div>
+        <div class="view-summary-title" id="currentViewTitle"></div>
+      </section>
+
+      <hr id="mainDivider">
+
+      <div id="doneArchiveTools" class="archive-tools hidden">
+        <input id="doneSearchInput" type="text" placeholder="Search completed items...">
+      </div>
+
+      <div id="list"></div>
+
+      <div class="row-actions">
+        <button class="btn btn-primary" id="addItemBtn">+ Item</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="loginOverlay" class="login-overlay hidden" aria-hidden="true">
+    <div class="login-card">
+      <div class="login-eyebrow">Hosted Checky's List</div>
+      <h1 class="login-title">Sign In</h1>
+      <p class="login-copy">Use your PocketBase account to load the checklist data this user can access.</p>
+
+      <div class="setting-row hidden">
+        <label for="loginServerUrlInput">PocketBase URL</label>
+        <input id="loginServerUrlInput" type="url" inputmode="url" autocomplete="url">
+      </div>
+
+      <div class="setting-row">
+        <label for="loginEmailInput">Email</label>
+        <input id="loginEmailInput" type="email" inputmode="email" placeholder="you@example.com" autocomplete="username">
+      </div>
+
+      <div class="setting-row">
+        <label for="loginPasswordInput">Password</label>
+        <input id="loginPasswordInput" type="password" placeholder="Enter your password" autocomplete="current-password">
+      </div>
+
+      <div class="inline">
+        <button id="loginSubmitBtn" class="btn btn-primary" type="button">Sign in</button>
+        <button id="loginSettingsBtn" class="btn btn-ghost" type="button">Advanced</button>
+      </div>
+
+      <div id="loginStatus" class="hint login-status"></div>
+    </div>
+  </div>
+
+  <div id="itemContextMenu" class="context-menu hidden"></div>
+
+  <script src="./auth-client.js"></script>
+  <script src="./auth-code-dialog.js"></script>
+  <script src="./checkys-base.js"></script>
+  <script src="./mobile-storage.js"></script>
+  <script src="./renderer.js"></script>
+  <script src="./pwa.js"></script>
+</body>
+</html>
+
+
+
