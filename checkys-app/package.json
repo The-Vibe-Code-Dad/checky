@@ -1,0 +1,83 @@
+{
+  "name": "checkys-app",
+  "productName": "Checky's List",
+  "version": "1.0.7",
+  "description": "Always-on-top checklist widget with global hotkey and file persistence",
+  "main": "main.js",
+  "author": "BTF",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "pack:win": "electron-builder --win nsis msi",
+    "test": "node --test test/*.test.cjs"
+  },
+  "devDependencies": {
+    "electron": "45.2.1",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "com.checkys.app",
+    "productName": "Checky's List",
+    "directories": {
+      "buildResources": "build",
+      "output": "..\\checkys-package"
+    },
+    "extraResources": [
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      },
+      {
+        "from": "README.md",
+        "to": "README.md"
+      }
+    ],
+    "files": [
+      "main.js",
+      "preload.js",
+      "logo.png",
+      "renderer/**/*",
+      "package.json",
+      "lib/**/*"
+    ],
+    "asar": true,
+    "win": {
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "msi",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "checkys-list-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "include": "build/installer.nsh",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true
+    },
+    "msi": {
+      "perMachine": false
+    }
+  },
+  "overrides": {
+    "@electron/asar": {
+      "version": "4.3.1",
+      "glob": "14.0.3"
+    },
+    "@electron/universal": "3.0.6",
+    "filelist": "2.0.2",
+    "minimatch": "11.0.3"
+  }
+}

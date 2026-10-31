@@ -1,0 +1,61 @@
+services:
+  pocketbase:
+    build:
+      context: ./pocketbase
+      dockerfile: Dockerfile
+      args:
+        PB_VERSION: ${PB_VERSION:-0.41.1}
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-America/New_York}
+      CHECKY_TRUST_PROXY: "true"
+    ports:
+      - "127.0.0.1:${POCKETBASE_PORT:-8090}:8080"
+    expose:
+      - "8080"
+    volumes:
+      - pocketbase_data:/pb/pb_data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    stop_grace_period: 30s
+
+  web:
+    environment:
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-127.0.0.1/32 ::1/128}
+    build:
+      context: .
+      dockerfile: web.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      pocketbase:
+        condition: service_healthy
+    ports:
+      - "${HTTP_PORT:-17760}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  backup:
+    image: alpine:3.24.3
+    profiles: ["tools"]
+    environment:
+      BACKUP_NAME: ${BACKUP_NAME:-}
+    volumes:
+      - pocketbase_data:/source:ro
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - 'test -n "$$BACKUP_NAME" && tar -czf "/backups/$$BACKUP_NAME" -C /source .'
+
+name: checkys-base
+
+volumes:
+  pocketbase_data:
+    name: ${POCKETBASE_DATA_VOLUME:-checkys-base_pocketbase_data}

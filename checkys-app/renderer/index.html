@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-src 'none'; frame-ancestors 'none';">
+  <title>Checky's List</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div id="app">
+    <div class="topbar">
+      <div class="brand">
+        <img src="../logo.png" alt="Checky's List logo" class="brand-logo">
+        <div class="title">Checky's List</div>
+      </div>
+      <div class="topbar-center">
+        <div id="topbarViewTitle" class="topbar-view-title hidden">Settings</div>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn btn-primary topbar-update-btn hidden" id="updateAvailableBtn" type="button" aria-label="Install available update" title="Install available update">Update</button>
+        <button class="btn btn-ghost topbar-btn hidden" id="doneToggle" title="Done archive">&#9745;</button>
+        <button class="btn btn-ghost topbar-btn" id="quickSyncBtn" title="Sync now">&#10227;</button>
+        <button class="btn btn-ghost topbar-btn" id="settingsToggle" title="Settings">&#9881;</button>
+        <button class="btn btn-ghost hidden" id="settingsCloseBtn" title="Back to checklist">Back</button>
+        <button class="btn btn-ghost topbar-btn" id="closeWindowBtn" title="Hide window">&times;</button>
+      </div>
+    </div>
+
+    <div class="view-stage">
+      <section id="mainView" class="view-pane">
+        <div id="checklistNavigation" class="checklist-navigation">
+          <div class="tab-navigation-header">
+            <span>Tabs</span>
+            <button id="refreshChecklistsBtn" class="btn btn-ghost" type="button" title="Refresh checklists" aria-label="Refresh checklists">&#10227;</button>
+          </div>
+          <div id="alwaysVisibleTabs" class="tabs always-visible-tabs" role="group" aria-label="Always shown tabs"></div>
+          <div id="checklistFolders" class="tab-folders"></div>
+          <div id="checklistTabPanel" class="checklist-tab-panel">
+            <div class="tabs" id="tabs"></div>
+            <div class="row-actions">
+              <button class="btn btn-primary" id="addTabBtn">+ Tab</button>
+            </div>
+          </div>
+          <div id="availableChecklistsStatus" class="hint checklist-navigation-status" role="status" aria-live="polite"></div>
+        </div>
+
+        <hr>
+
+        <div id="doneArchiveTools" class="archive-tools hidden">
+          <input id="doneSearchInput" type="text" placeholder="Search completed items...">
+        </div>
+
+        <div id="list"></div>
+
+        <div class="row-actions">
+          <button class="btn btn-primary" id="addItemBtn">+ Item</button>
+        </div>
+      </section>
+
+      <section id="settingsPanel" class="settings-page view-pane hidden">
+        <div class="setting-row">
+          <label>Hotkey</label>
+          <div class="inline">
+            <input id="hotkeyInput" type="text" readonly>
+            <button id="hotkeyCaptureBtn" class="btn btn-primary">Change</button>
+          </div>
+          <div class="hint" id="hotkeyHint"></div>
+        </div>
+
+        <div class="setting-row toggle-row">
+          <label><input id="runOnStartup" type="checkbox"> Run on startup</label>
+        </div>
+        <div class="setting-row toggle-row">
+          <label><input id="alwaysOnTop" type="checkbox"> Always on top</label>
+        </div>
+        <div class="setting-row toggle-row">
+          <label><input id="autoHideOnBlur" type="checkbox"> Auto-hide on focus loss</label>
+        </div>
+        <div class="setting-row toggle-row">
+          <label><input id="showDoneTab" type="checkbox"> Show Done archive</label>
+        </div>
+
+        <div class="setting-row">
+          <label>Sync target</label>
+          <div id="syncTarget" class="path">Local cache only</div>
+          <div class="inline">
+            <button id="syncNowBtn" class="btn btn-primary" type="button">Pull latest</button>
+          </div>
+          <div class="hint">Checklist edits still save locally. When PocketBase is configured below, changes also push in the background to this desktop's current PocketBase checklist.</div>
+        </div>
+
+        <div class="setting-row">
+          <label>Safety copy</label>
+          <div id="syncRestorePointSummary" class="path">No pre-sync backup yet</div>
+          <div class="inline">
+            <button id="restoreSyncRestorePointBtn" class="btn btn-ghost" type="button">Restore backup</button>
+          </div>
+          <div class="hint">A local restore point is saved before each manual sync so you can recover quickly if the pulled checklist is not what you expected.</div>
+        </div>
+
+        <div class="setting-row">
+          <button id="advancedSettingsToggle" class="btn btn-ghost advanced-toggle" type="button" aria-expanded="false">
+            <span>Advanced sync</span>
+            <span id="advancedSummary" class="advanced-summary">No server configured</span>
+          </button>
+          <div id="advancedSettingsPanel" class="advanced-panel hidden">
+            <div class="hint">PocketBase connection settings for this desktop. New users should receive a personal checklist automatically. Email, password, and auth token stay on this desktop.</div>
+            <div class="advanced-workspace">
+              <div class="advanced-credentials">
+                <div class="setting-row">
+                  <label for="serverUrlInput">PocketBase URL</label>
+                  <input id="serverUrlInput" type="url" inputmode="url" placeholder="https://checky.yourdomain.com" autocomplete="url">
+                </div>
+
+                <div class="setting-row">
+                  <label for="syncEmailInput">Login email</label>
+                  <input id="syncEmailInput" type="email" inputmode="email" placeholder="you@example.com" autocomplete="username">
+                </div>
+
+                <div class="setting-row">
+                  <label for="syncPasswordInput">Password</label>
+                  <input id="syncPasswordInput" type="password" placeholder="Enter PocketBase password" autocomplete="current-password">
+                </div>
+
+                <div class="setting-row">
+                  <div class="inline">
+                    <button id="connectSyncBtn" class="btn btn-primary" type="button">Connect</button>
+                    <button id="disconnectSyncBtn" class="btn btn-ghost" type="button">Disconnect</button>
+                    <button id="verifySyncBtn" class="btn btn-ghost" type="button">Verify access</button>
+                  </div>
+                  <div class="hint">Connect saves these settings, clears any old saved session and checklist selection, and signs in again. Verify access opens a browser window for Cloudflare checks on stricter networks. Disconnect clears the saved sync user, token, and checklist cache on this desktop.</div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <label>Data location</label>
+          <div id="dataLocation" class="path"></div>
+        </div>
+
+        <div class="setting-row">
+          <div class="inline">
+            <button id="backupNowBtn" class="btn btn-primary">Backup now</button>
+            <select id="backupSelect"></select>
+            <button id="restoreBackupBtn" class="btn btn-ghost">Restore backup</button>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <button id="resetChecklistBtn" class="btn btn-danger">Reset checklist</button>
+        </div>
+        <div class="setting-row">
+          <button id="instructionsBtn" class="btn btn-ghost">Instructions</button>
+        </div>
+        <div class="setting-row">
+          <label>Desktop updates</label>
+          <div id="desktopVersionSummary" class="path">Current version</div>
+          <div class="inline">
+            <button id="checkForUpdatesBtn" class="btn btn-ghost" type="button">Check for updates</button>
+            <button id="downloadUpdateBtn" class="btn btn-primary hidden" type="button">Download and install</button>
+          </div>
+          <div id="desktopUpdateStatus" class="hint">Updates are downloaded from the connected Checky Base server and verified before Windows opens the installer.</div>
+        </div>
+        <div id="settingsStatus" class="hint"></div>
+      </section>
+    </div>
+  </div>
+
+  <div id="itemContextMenu" class="context-menu hidden"></div>
+
+  <script src="./auth-code-dialog.js"></script>
+  <script src="./renderer.js"></script>
+</body>
+</html>
