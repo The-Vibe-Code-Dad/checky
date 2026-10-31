@@ -1,12 +1,13 @@
-FROM alpine:3.24.3 AS downloader
+FROM --platform=$BUILDPLATFORM alpine:3.24.3 AS downloader
 
 ARG PB_VERSION=0.41.1
+ARG TARGETARCH
 
 WORKDIR /tmp
 
 RUN apk add --no-cache ca-certificates unzip
 
-ADD https://ganigeorgiev.com/meta/pocketbase/pocketbase/download/v${PB_VERSION}/pocketbase_${PB_VERSION}_linux_amd64.zip /tmp/pocketbase.zip
+ADD https://ganigeorgiev.com/meta/pocketbase/pocketbase/download/v${PB_VERSION}/pocketbase_${PB_VERSION}_linux_${TARGETARCH}.zip /tmp/pocketbase.zip
 
 RUN unzip /tmp/pocketbase.zip -d /out \
   && rm /tmp/pocketbase.zip \

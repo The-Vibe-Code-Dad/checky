@@ -241,6 +241,11 @@ base:
 - Prepared the canonical Base sources and deployment scripts for a clean public source repository, excluding local data, secrets, installers, and generated release manifests.
 - Clarified that a hosted desktop update channel is prepared separately with the signing publisher.
 
+## v0050 - 2026-10-30
+- Added GitHub Actions to validate security and real Base/desktop sync before publishing paired web and PocketBase images for AMD64 and ARM64 on updates to main.
+- Added a reusable CasaOS installer that pulls published GHCR images, persists data under /DATA/AppData/checkys-base/pb_data, and keeps the direct admin port on loopback.
+- Restricted Docker build contexts to required app/backend files and documented graphical installation, matched image updates, backups, and migration from older named volumes.
+
 desktop:
 
 ## v0001 - 2026-04-07
@@ -465,3 +470,6 @@ pocketbase:
 - Updated the standalone image to PocketBase 0.41.1 and Alpine 3.24.3, and bound its direct port to loopback by default.
 - Mirrored Base's native-auth cookie bridge, credential/policy session revocation, transactional checklist quotas, shared-access revocation, schema repair, and standard rate-limit migration.
 - Verified an isolated 0.36.8-to-0.41.1 upgrade retains personal/shared checklist JSON, versions, assignments, and authentication; retained backup-and-restore rollback guidance.
+
+## v0031 - 2026-10-30
+- Made the standalone and canonical PocketBase Dockerfiles select the correct AMD64 or ARM64 binary and added build-context allowlists to exclude runtime data and unrelated files.

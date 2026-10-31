@@ -68,7 +68,54 @@ On first boot, PocketBase may log an install link using `0.0.0.0`. For local use
 - `http://localhost:8090/_/`
 - `http://YOUR-LAN-IP:8090/_/`
 
+## CasaOS Install Without Building
+
+Download [docker-compose.casaos.yml](https://raw.githubusercontent.com/The-Vibe-Code-Dad/checky/main/checkys-base/docker-compose.casaos.yml). In CasaOS, open the App Store's custom installation/import option, import the downloaded Compose YAML, and install it. The file contains both services and needs no registry login or local image build. It supports x86-64 (`amd64`) and 64-bit ARM (`arm64`), including a Raspberry Pi running a 64-bit OS.
+
+Open the installed app, or visit `http://YOUR-CASAOS-IP:17760`, then create the first user. That user becomes the initial Checky's List app admin and PocketBase superuser. In the desktop app, connect to this same Base URL and sign in to sync personal and shared checklists.
+
+The installation uses:
+
+- `ghcr.io/the-vibe-code-dad/checky-web:latest`
+- `ghcr.io/the-vibe-code-dad/checky-pocketbase:latest`
+- `/DATA/AppData/checkys-base/pb_data` on the CasaOS host for persistent database and uploaded files
+- port `17760` for the app; PocketBase port `8090` is bound only to the host's loopback interface
+
+For internet access, put the web entrypoint behind your HTTPS reverse proxy. If that proxy forwards real client addresses, set the web service's `TRUSTED_PROXY_CIDRS` to its specific trusted address or subnet. Keep direct PocketBase/admin private. The published images contain the app source, hooks, and migrations; signed desktop installers and update manifests remain a separate release channel.
+
+### Updating a CasaOS installation
+
+After a successful publish, `latest` points to the new images. Existing installations keep running their current images until you update them. Stop both Checky services and back up the entire `/DATA/AppData/checkys-base/pb_data` directory before upgrading. Then use CasaOS's image update/recreate controls for **both** services, keeping the same data-directory mapping. Do not delete that directory when replacing containers.
+
+The source-build updater scripts below manage Docker named volumes, not this CasaOS bind-mounted directory. If migrating from an older source-build installation, first stop it and back up its complete PocketBase data volume. Copy that volume's contents into the chosen CasaOS data directory before starting the new stack; do not run two PocketBase processes against the same database. An empty directory starts a fresh installation and does not import an old volume automatically.
+
+### Automatic image publishing
+
+[Publish Docker images](https://github.com/The-Vibe-Code-Dad/checky/actions/workflows/publish-images.yml) runs on every push to `main` and can also be started manually from GitHub Actions on `main`. Pull requests run validation only. Publishing waits for the backend security tests, real Base/desktop sync tests, desktop security tests, Compose validation, and web-image configuration check.
+
+The workflow builds both architectures for each image and publishes `sha-<full-commit-sha>` tags. It promotes the completed pair to `latest` only after both image builds have succeeded. Use matching commit tags for a fixed deployment. Database migrations may require restoring the corresponding backup when rolling back; switching image tags alone does not undo migrations.
+
+Publishing uses the repository's short-lived `GITHUB_TOKEN` with package-write permission; no personal access token or signing key is required. Action versions are pinned to commit hashes. New GHCR packages default to private, so their owner must set each package's visibility to public once before users can pull without logging in. Fork maintainers must also update the workflow's repository guard, image prefix, and installer image names for their own account.
+
 ## Common Commands
+
+### Cloudflare Tunnel and other HTTPS proxies
+
+If the browser uses HTTPS but the tunnel connects to Base over HTTP, set the public browser URL in `checkys-base/.env`:
+
+```dotenv
+CHECKY_PUBLIC_ORIGIN=https://checky.example.com
+```
+
+Use your actual domain, including a port only if the browser URL uses a nonstandard port. Keep the tunnel pointed at the **web** service on port `17760` (or `web:80` on its Docker network), so the app and `/api` share one origin. Deploy the updated sources with `bash scripts/update-base.sh` or the Windows updater below. If only changing this environment setting after deploying the updated code, run `docker compose up -d pocketbase` to recreate the backend with it.
+
+For CasaOS or another container UI, add `CHECKY_PUBLIC_ORIGIN` to the **PocketBase container's environment**, then update/recreate it using an image built from these sources. Merely restarting an old image does not install the fix.
+
+This setting prevents `Cross-origin session request rejected.` when an HTTPS tunnel changes the protocol or host seen by PocketBase. It pins browser session writes to that exact public origin and makes session cookies Secure for HTTPS. After setting it, use the public URL for browser sign-in; local HTTP browser sign-in is intentionally no longer accepted. Leave it blank for a local HTTP-only installation. Desktop bearer-token sync remains compatible.
+
+`TRUSTED_PROXY_CIDRS` still controls forwarded client IPs for rate limiting. Set it only to the tunnel connector/proxy source addresses actually seen by Caddy; for a local Cloudflare Tunnel connector, these are not Cloudflare's public edge ranges. The public-origin setting does not broaden proxy trust.
+
+### Start or update
 
 Start or rebuild the stack:
 

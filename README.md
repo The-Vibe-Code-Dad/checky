@@ -19,6 +19,8 @@ Checky Base is the primary product and canonical web source. The Electron deskto
 
 ## Checky Base Quick Start
 
+For a graphical CasaOS install with prebuilt AMD64/ARM64 images, download [docker-compose.casaos.yml](https://raw.githubusercontent.com/The-Vibe-Code-Dad/checky/main/checkys-base/docker-compose.casaos.yml) and import it into CasaOS. See the [CasaOS installation and update guide](checkys-base/README.md#casaos-install-without-building).
+
 Checky Base runs the hosted web app and PocketBase together. From `checkys-base/`:
 
 ```powershell
