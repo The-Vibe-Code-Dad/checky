@@ -150,4 +150,6 @@ docker compose exec pocketbase /pb/pocketbase superuser create you@example.com y
 
 ## Security upgrade
 
+For hosted browser sessions behind an HTTPS tunnel or reverse proxy, set `CHECKY_PUBLIC_ORIGIN=https://your-checky-domain.example` in `.env` and recreate the updated PocketBase container. This pins session-origin validation and Secure cookies to the public URL even when the proxy's internal hop uses HTTP or a different Host. Leave it empty for direct local HTTP. Once set, browser session writes must come from that public URL; desktop bearer-token sync is unaffected. See the canonical [Base proxy setup](../checkys-base/README.md#cloudflare-tunnel-and-other-https-proxies).
+
 The default runtime is PocketBase 0.41.1 on Alpine 3.24.3. Back up the data volume and update existing `.env` version overrides before rebuilding. Hooks and the security migration mirror canonical Checky Base, including native MFA sign-in, password-bound hosted cookies, transactional payload quotas, and shared-access revocation. Existing hosted sessions must sign in once after upgrading. The direct server is loopback-bound by default. Forwarded client-IP headers are trusted only when `CHECKY_TRUST_PROXY=true` is explicitly supplied behind a proxy that overwrites `X-Checky-Client-IP`; the bundled Base stack handles this automatically.

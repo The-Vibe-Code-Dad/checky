@@ -246,6 +246,11 @@ base:
 - Added a reusable CasaOS installer that pulls published GHCR images, persists data under /DATA/AppData/checkys-base/pb_data, and keeps the direct admin port on loopback.
 - Restricted Docker build contexts to required app/backend files and documented graphical installation, matched image updates, backups, and migration from older named volumes.
 
+## v0051 - 2026-10-30
+- Added optional `CHECKY_PUBLIC_ORIGIN` for Cloudflare Tunnel and HTTPS proxies so hosted sessions validate the public browser origin and issue Secure cookies even when the internal connection uses HTTP or a different host.
+- Kept exact cross-origin rejection, local HTTP defaults, and desktop bearer sync; documented deployment configuration using generic example domains only.
+- Added disposable regression checks for public origins, cookie flags, forged headers, logout, and invalid configuration; verified the existing backend security and Base/desktop sync suite.
+
 desktop:
 
 ## v0001 - 2026-04-07
@@ -473,3 +478,6 @@ pocketbase:
 
 ## v0031 - 2026-10-30
 - Made the standalone and canonical PocketBase Dockerfiles select the correct AMD64 or ARM64 binary and added build-context allowlists to exclude runtime data and unrelated files.
+
+## v0032 - 2026-10-30
+- Mirrored Base's optional fixed public-origin session validation and Secure-cookie handling for HTTPS tunnels, with Compose environment configuration and standalone deployment guidance.

@@ -9,6 +9,7 @@ services:
     environment:
       TZ: ${TZ:-America/New_York}
       CHECKY_TRUST_PROXY: "true"
+      CHECKY_PUBLIC_ORIGIN: ${CHECKY_PUBLIC_ORIGIN:-}
     ports:
       - "127.0.0.1:${POCKETBASE_PORT:-8090}:8080"
     expose:

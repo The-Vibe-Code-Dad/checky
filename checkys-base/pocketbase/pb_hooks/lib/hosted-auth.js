@@ -14,9 +14,28 @@ function stamp(user) {
 function cookieKey(e) {
   try { return e.request.cookie(COOKIE).value || "" } catch (_) { return "" }
 }
+function publicOrigin(e) {
+  const configured = $os.getenv("CHECKY_PUBLIC_ORIGIN").trim()
+  if (!configured) return ""
+  // A deployment setting, never an Origin/forwarded header supplied by the caller.
+  const invalid = () => new InternalServerError("CHECKY_PUBLIC_ORIGIN must be an http(s) origin without a path, credentials, query, or fragment.")
+  let url
+  try { url = e.request.url.parse(configured) } catch (_) { throw invalid() }
+  if (!["http", "https"].includes(url.scheme) || !url.hostname() || url.user ||
+      (url.path && url.path !== "/") || url.rawQuery || url.forceQuery || configured.includes("#")) throw invalid()
+  const port = url.port()
+  if (port && (Number(port) < 1 || Number(port) > 65535)) throw invalid()
+  const host = url.host.toLowerCase().replace(url.scheme === "https" ? /:443$/ : /:80$/, "")
+  return url.scheme + "://" + host
+}
+function requestOrigin(e) {
+  // Caddy sanitizes forwarding headers; a fixed public origin also works behind
+  // HTTPS tunnels whose private HTTP hop or Host differs from the browser URL.
+  const scheme = e.isTLS() || e.request.header.get("X-Forwarded-Proto") === "https" ? "https" : "http"
+  return publicOrigin(e) || scheme + "://" + e.request.host
+}
 function cookie(e, key) {
-  // Caddy overwrites this header, accepting it only from explicitly trusted TLS proxies.
-  const secure = e.isTLS() || e.request.header.get("X-Forwarded-Proto") === "https"
+  const secure = requestOrigin(e).startsWith("https://")
   e.setCookie(new Cookie({ name: COOKIE, value: key, path: "/", httpOnly: true,
     secure, sameSite: 2, maxAge: key ? TTL / 1000 : -1 }))
 }
@@ -32,8 +51,7 @@ function allowed(e, user) {
 function requireSameOrigin(e) {
   const origin = e.request.header.get("Origin")
   if (!origin) return // Native clients do not send Origin.
-  const scheme = e.isTLS() || e.request.header.get("X-Forwarded-Proto") === "https" ? "https" : "http"
-  if (origin !== scheme + "://" + e.request.host) throw new ForbiddenError("Cross-origin session request rejected.")
+  if (origin !== requestOrigin(e)) throw new ForbiddenError("Cross-origin session request rejected.")
 }
 function loadCookie(e) {
   if (e.request.header.get("Authorization")) return
