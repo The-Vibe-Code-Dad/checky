@@ -239,6 +239,9 @@ function normalizeData(data) {
       text: sanitizeMultilineText(item?.text, MAX_ITEM_TEXT_LENGTH),
       done: !!item?.done,
       completedAt: normalizeCompletedAt(item?.completedAt),
+      reminderAt: normalizeCompletedAt(item?.reminderAt),
+      reminderRepeat: ['daily', 'weekly', 'monthly', 'yearly'].includes(item?.reminderRepeat) ? item.reminderRepeat : 'none',
+      reminderTimeZone: typeof item?.reminderTimeZone === 'string' ? item.reminderTimeZone.slice(0, 120) : null,
       originalTabName: sanitizeSingleLineText(item?.originalTabName, MAX_TAB_NAME_LENGTH) || null
     }));
   });
@@ -1188,8 +1191,12 @@ function renderItemContextMenu() {
       menuState.itemIndex === tab.items.length - 1
     );
     addAction("Mark done", () => markItemDone(menuState.tabIndex, menuState.itemIndex));
+    addAction("Remind", () => editItemReminder(tab.id, item.id), false, !!item.done);
   }
   addAction("Delete", () => armItemDeleteConfirm(menuState.tabIndex, menuState.itemIndex), true);
+  const bounds = els.itemContextMenu.getBoundingClientRect();
+  els.itemContextMenu.style.left = `${Math.max(8, Math.min(menuState.x, window.innerWidth - bounds.width - 8))}px`;
+  els.itemContextMenu.style.top = `${Math.max(8, Math.min(menuState.y, window.innerHeight - bounds.height - 8))}px`;
 }
 
 function openItemContextMenu(tabIndex, itemIndex, x, y) {
@@ -1870,6 +1877,23 @@ function renderItems() {
   };
 }
 
+async function editItemReminder(tabId, itemId) {
+  const checklistId = state.currentChecklistId;
+  const item = state.data.tabs.find(tab => tab.id === tabId)?.items.find(item => item.id === itemId);
+  if (!item || item.done) return;
+  const value = await window.checkyReminders.edit(item);
+  if (value === undefined) return;
+  const current = state.data.tabs.find(tab => tab.id === tabId)?.items.find(item => item.id === itemId);
+  if (checklistId !== state.currentChecklistId || !current || current.done) return;
+  current.reminderAt = value?.at || null;
+  current.reminderRepeat = value?.repeat || 'none';
+  current.reminderTimeZone = value?.timeZone || null;
+  clearPendingSave();
+  const saved = await persistChecklistSnapshot(createChecklistSnapshot(), ++lastChecklistSaveRequestId);
+  renderItems();
+  if (saved) await runManualSync('reminder');
+}
+
 function render() {
   state.data = normalizeData(state.data);
   state.settings = normalizeSettings(state.settings);
@@ -2310,8 +2334,23 @@ async function init() {
     ? !hasHostedLoginCredentials()
     : false;
   render();
+  void window.checkyReminders.init(state.hostedSession.user.id);
   if (navigator.onLine && hasHostedLoginCredentials()) {
-    setTimeout(() => void runManualSync("startup"), 500);
+    setTimeout(async () => {
+      await runManualSync("startup");
+      const params = new URLSearchParams(location.search);
+      const checklistId = params.get('reminder');
+      if (checklistId && state.availableChecklists.some(item => item.id === checklistId)) {
+        if (state.currentChecklistId !== checklistId) await useSelectedChecklist(checklistId);
+        if (state.currentChecklistId === checklistId) {
+          const index = state.data.tabs.findIndex(tab => tab.name === params.get('tab'));
+          if (index >= 0) state.data.active = index;
+          state.ui.settingsViewOpen = false;
+          render();
+        }
+        history.replaceState(null, '', location.pathname);
+      }
+    }, 500);
   }
   window.addEventListener("online", () => {
     if (hasHostedLoginCredentials()) void runManualSync("reconnect");

@@ -1,4 +1,4 @@
-const CACHE_NAME = "checkys-pwa-v10";
+const CACHE_NAME = "checkys-pwa-v12";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -9,12 +9,35 @@ const APP_SHELL = [
   "./checkys-base.js",
   "./mobile-storage.js",
   "./renderer.js",
+  "./reminders.js",
   "./pwa.js",
   "./manifest.webmanifest",
   "./icon-192.png",
   "./icon-512.png",
   "./logo.png"
 ];
+
+self.addEventListener('push', event => {
+  let payload = {};
+  try { payload = event.data?.json() || {}; } catch (_) {}
+  event.waitUntil(self.registration.showNotification("Checky's List reminder", {
+    body: typeof payload.body === 'string' ? payload.body.slice(0, 200) : 'An event reminder is due.',
+    icon: './icon-192.png', badge: './icon-192.png',
+    tag: typeof payload.tag === 'string' ? payload.tag : 'checky-reminder',
+    data: { url: typeof payload.url === 'string' ? payload.url : '/' }
+  }));
+});
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const url = new URL(event.notification.data?.url || '/', self.location.origin);
+  if (url.origin !== self.location.origin) return;
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async clients => {
+    const client = clients.find(client => client.url === url.href);
+    if (client) return client.focus();
+    // Opening a separate window preserves unsaved work in an existing checklist.
+    return self.clients.openWindow(url.href);
+  }));
+});
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));

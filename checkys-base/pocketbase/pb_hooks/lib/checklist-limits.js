@@ -349,6 +349,32 @@ function validate(app, record) {
 function save(e) {
   if (e.type === 'update') {
     const previous = e.record.original();
+    // Older desktop/PWA builds omit unknown task fields on save. An omitted
+    // reminder keeps its existing value; updated clients clear it with null.
+    const before = normalizeChecklistPayload(previous.get('data'));
+    const after = normalizeChecklistPayload(e.record.get('data'));
+    if (isChecklistPayload(before) && isChecklistPayload(after)) {
+      const reminders = {};
+      for (const tab of before.tabs) for (const item of tab.items) {
+        if (typeof item?.id === 'string' && typeof item.reminderAt === 'string' && Number.isFinite(Date.parse(item.reminderAt))) {
+          reminders['item:' + item.id] = { reminderAt: item.reminderAt,
+            reminderRepeat: item.reminderRepeat || 'none', reminderTimeZone: item.reminderTimeZone || null };
+        }
+      }
+      let changed = false;
+      for (const tab of after.tabs) for (const item of tab.items) {
+        if (item && typeof item === 'object' && reminders['item:' + item.id]) {
+          const old = reminders['item:' + item.id];
+          for (const field of ['reminderAt', 'reminderRepeat', 'reminderTimeZone']) {
+            if (!Object.prototype.hasOwnProperty.call(item, field)) {
+              item[field] = field !== 'reminderAt' && !item.reminderAt ? (field === 'reminderRepeat' ? 'none' : null) : old[field];
+              changed = true;
+            }
+          }
+        }
+      }
+      if (changed) e.record.set('data', after);
+    }
     // Access revocation must remain possible even for legacy over-quota data.
     if (previous.getString('data') === e.record.getString('data') && previous.getString('owner') === e.record.getString('owner')) return e.next();
   }
@@ -367,4 +393,4 @@ function save(e) {
     });
   } finally { e.app = originalApp; }
 }
-module.exports = {save};
+module.exports = {save, normalizeChecklistPayload};

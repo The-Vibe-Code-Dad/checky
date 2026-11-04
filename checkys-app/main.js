@@ -202,6 +202,9 @@ function normalizeChecklist(data) {
       text: sanitizeMultilineText(item?.text, MAX_ITEM_TEXT_LENGTH),
       done: !!item?.done,
       completedAt: normalizeCompletedAt(item?.completedAt),
+      reminderAt: normalizeCompletedAt(item?.reminderAt),
+      reminderRepeat: ['daily', 'weekly', 'monthly', 'yearly'].includes(item?.reminderRepeat) ? item.reminderRepeat : 'none',
+      reminderTimeZone: typeof item?.reminderTimeZone === 'string' ? item.reminderTimeZone.slice(0, 120) : null,
       originalTabName: sanitizeSingleLineText(item?.originalTabName, MAX_TAB_NAME_LENGTH) || null
     }));
   });

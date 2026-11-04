@@ -261,6 +261,19 @@ base:
 - Added a pinned GitHub Release selection and bounded HTTPS downloader with signature, version, filename, redirect-host, and SHA-256 validation; private signing keys remain local.
 - Extended CI to test both CasaOS image variants and verify the installer served through Base before publishing all images. Documented CasaOS tag selection and an optional source-build download/mount step after git pull.
 
+## v0054 - 2026-11-04
+- Added a persistent `pb_data/checky-config.json` for Docker public-origin and reminder settings, with existing environment overrides and immediate file reloads; documented Compose, plain Docker and CasaOS setup.
+- Added per-item event dates, per-browser notification opt-in, and server-sent Web Push for closed tabs/PWAs. The PocketBase image now includes a private Node transport with persistent VAPID keys, access checks, retry/backoff, expired-subscription cleanup and delivery records.
+- Preserved existing reminder dates when older clients omit the new field on save, while allowing explicit removal and task deletion.
+- Added service-worker notification handling and checklist links, mobile-friendly reminder editing, timezone validation, and explicit permission/HTTPS feedback. Updated the PWA cache and dependency notices.
+- Verified real PocketBase scheduling, authorization, revocation, public-origin configuration, security/MFA and Base/desktop sync; added unit, integration and browser regressions and CI checks. Live browser-provider delivery and a Docker image build still require deployment verification on a Docker host.
+
+## v0055 - 2026-11-04
+- Moved Remind from the checklist row into its press-and-hold/right-click menu and kept the expanded menu inside the viewport.
+- Added non-repeating, daily, weekly, monthly and yearly reminder options with saved timezones. Calendar repeats retain their original date/time, clamp shorter months, skip nonexistent spring-forward times and avoid duplicate fall-back occurrences or missed-series backlogs.
+- Preserved repeat metadata across web storage, sync, older-client saves and explicit removal; included timezone data in the Docker backend and bumped the PWA cache.
+- Verified hold-menu behavior and repeat editing at desktop/phone sizes, 16 real PocketBase calendar cases, delivery/access controls, security/MFA, and Base/desktop sync. Live-device push delivery and Docker image builds remain deployment checks.
+
 desktop:
 
 ## v0001 - 2026-04-07
@@ -377,6 +390,12 @@ desktop:
 ## v0032 - 2026-10-31
 - Bumped the Windows desktop release to 1.0.8 and rebuilt EXE/MSI installers to include the later folder navigation and tab changes that were absent from the earlier 1.0.7 package.
 - Retained the existing signed HTTPS updater and personal/shared Base sync protocol.
+
+## v0033 - 2026-11-04
+- Preserved event reminder timestamps through desktop normalization, storage and sync so desktop edits do not remove reminders created in Base; verified real Base/desktop round trips. Native desktop reminder controls and the public release version are unchanged.
+
+## v0034 - 2026-11-04
+- Preserved reminder repeat frequency and timezone in desktop normalization, local storage and sync; verified round trips with Base without adding desktop notification controls or changing the public release version.
 
 pocketbase:
 
@@ -495,3 +514,11 @@ pocketbase:
 
 ## v0032 - 2026-10-30
 - Mirrored Base's optional fixed public-origin session validation and Secure-cookie handling for HTTPS tunnels, with Compose environment configuration and standalone deployment guidance.
+
+## v0033 - 2026-11-04
+- Mirrored persistent Docker public-origin configuration, locked push-subscription/delivery collections, account-aware reminder scheduling and the private Web Push transport from Base.
+- Included persistent signing keys in the existing data-directory backup model and documented standalone Docker/binary startup for notifications.
+
+## v0034 - 2026-11-04
+- Mirrored timezone-aware daily/weekly/monthly/yearly reminder scheduling, original-date month-end handling and preservation of repeat fields omitted by older clients.
+- Added Docker timezone data and documented calendar-repeat behavior and cancellation.

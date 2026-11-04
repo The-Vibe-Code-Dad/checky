@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -77,6 +77,12 @@
       </section>
 
       <section id="settingsPanel" class="settings hidden">
+        <div class="setting-row">
+          <label>Event reminders</label>
+          <div class="inline"><button id="notificationsToggle" type="button" class="btn btn-primary">Enable notifications</button></div>
+          <div id="notificationsStatus" class="hint" role="status" aria-live="polite"></div>
+          <div class="hint">Hold down an item (or right-click it), then choose Remind to set its date, time and repeat options. Completed or deleted items stop reminders once synced. Delivery may be delayed by your browser or device settings.</div>
+        </div>
         <div class="setting-row">
           <label>Sync</label>
           <div class="path" id="dataLocation"></div>
@@ -196,6 +202,7 @@
   <script src="./auth-code-dialog.js"></script>
   <script src="./checkys-base.js"></script>
   <script src="./mobile-storage.js"></script>
+  <script src="./reminders.js"></script>
   <script src="./renderer.js"></script>
   <script src="./pwa.js"></script>
 </body>

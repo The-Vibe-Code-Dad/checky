@@ -15,6 +15,7 @@ The hosted package currently includes:
 - `pocketbase/` with the PocketBase Dockerfile, migrations, and hooks needed by the hosted backend
 - `scripts/` with safe operational backup and desktop-update publishing helpers
 - `.env.example` for basic port, PocketBase version, and timezone settings
+- `checky-config.example.json` for persistent public-origin and web-reminder settings
 
 ## How It Works
 
@@ -138,6 +139,60 @@ Publishing uses the repository's short-lived `GITHUB_TOKEN` with package-write p
 
 ## Common Commands
 
+### Persistent Docker configuration file
+
+On first startup the backend creates **`/pb/pb_data/checky-config.json`**. It lives beside the database, survives container replacement, and is included in a complete data-directory backup. This works with ordinary Docker, Compose and CasaOS; no extra container or public port is required. In CasaOS its host path is `/DATA/AppData/checkys-base/pb_data/checky-config.json`.
+
+Edit it to use your browser-facing domain:
+
+```json
+{
+  "publicOrigin": "https://checky.example.com",
+  "pushSubject": "",
+  "remindersEnabled": true
+}
+```
+
+The generated default has an empty `publicOrigin` for direct local HTTP. Use only an origin (scheme, host and optional port), with no URL path. A nonempty `CHECKY_PUBLIC_ORIGIN` environment variable takes precedence; clear that variable if you want the file to control the origin. `CHECKY_CONFIG_FILE` can point to a different mounted configuration file.
+
+For a Compose named volume, copy out the current file, edit that copy, and copy it back:
+
+```bash
+docker compose cp pocketbase:/pb/pb_data/checky-config.json ./checky-config.json
+# Edit ./checky-config.json, preserving valid JSON.
+docker compose cp ./checky-config.json pocketbase:/pb/pb_data/checky-config.json
+```
+
+With plain Docker use `docker cp YOUR_POCKETBASE_CONTAINER:/pb/pb_data/checky-config.json ./checky-config.json` and `docker cp ./checky-config.json YOUR_POCKETBASE_CONTAINER:/pb/pb_data/checky-config.json`. The config file is read on requests and reminder runs, so file changes do not require container recreation. Deploy an image built from the current sources first; an older image cannot read this new file. Invalid JSON fails closed instead of silently falling back to another origin. Setting `publicOrigin` does not create DNS, a tunnel, or an HTTPS certificate.
+
+### Event reminders and browser notifications
+
+1. Open Checky over HTTPS (localhost also works for testing). In **Settings > Event reminders**, choose **Enable notifications** and allow the browser prompt. Enable it separately on each browser/device.
+2. **Hold down an item or right-click it**, then choose **Remind**. Pick its date/time and select **Does not repeat**, **Every day**, **Every week**, **Every month**, or **Every year**. Choose **Save and sync** and wait for a successful sync before closing Checky. Offline edits keep their schedule locally but cannot be scheduled until synced.
+3. The server sends Web Push even with the tab/PWA closed. Tapping a notification opens its checklist. Return to **Remind** in the hold/right-click menu to change or remove the reminder. Completing or deleting the item cancels future repeats once the change reaches the server.
+
+Repeats follow the saved timezone and original date/time. Monthly schedules on the 29th–31st use the last available day in a shorter month, then return to the original day in longer months; yearly February 29 reminders use February 28 in non-leap years. Local times skipped by spring-forward are skipped for that occurrence; fall-back produces one reminder. If the server or device was away, only the most recent occurrence within the last 24 hours is eligible, preventing a backlog of notifications. Editing an existing schedule preserves its timezone unless you change the date/time, which uses the current browser's timezone. Choose **Does not repeat** to stop repeats or **Remove reminder** to clear the schedule.
+
+Reminders apply to all personal and shared checklists the subscribing account can access, not just the currently open checklist. Shared checklist reminders can notify every member who enabled notifications. The backend rechecks account credentials, auth policy and checklist access on every run; signing out disables notifications for that browser session. Dates stay compatible with desktop sync, import and export; desktop notification controls are not added.
+
+Older clients that omit reminder fields keep the existing server-side date, repeat frequency and timezone for the same task ID. Updated clients remove a reminder explicitly with `null` or stop recurrence with `reminderRepeat: "none"`; deleting the task still removes its reminder. The Docker backend includes timezone data for these calendar schedules.
+
+The Docker backend includes a private loopback push transport. VAPID keys are generated once in **`pb_data/checky-push-keys.json`**; keep this private file in your full data backups and preserve it across upgrades. Do not delete it to update the app. There are no third-party account credentials to configure. The VAPID contact uses your HTTPS `publicOrigin`; for localhost testing or a separate contact, set `pushSubject` to `mailto:you@your-domain.com` (or use `CHECKY_PUSH_SUBJECT`). `remindersEnabled: false` pauses subscriptions and delivery server-wide.
+
+The backend checks once per minute, retries transient delivery failures with backoff for up to 24 hours after the due time, and removes expired subscriptions. Push services may retain an accepted notification for up to one hour while the device reconnects. Delivery time depends on browser/OS availability, notification permissions and Focus/Do Not Disturb settings; a fully terminated browser may need to restart. iPhone/iPad users must add Checky to the Home Screen and enable notifications from the installed app. Plain `http://YOUR-LAN-IP` cannot request web push. See [MDN Push API](https://developer.mozilla.org/en-US/docs/Web/API/Push_API) and [WebKit's iOS/iPadOS requirements](https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/).
+
+The server needs outbound HTTPS to the browser push providers (Google FCM, Mozilla, Apple or Windows). Subscription endpoints and keys are kept in locked PocketBase collections. Reminder delivery records prevent repeated sends and expire after two days; transient failures retry, and a crash between provider acceptance and recording success can still produce a repeat with the same notification tag. Browsers that rotate subscriptions can reconnect by reopening Checky. The service does not use background tab timers to deliver reminders.
+
+Developer checks, from the repo root:
+
+```bash
+npm ci --prefix checkys-base/pocketbase/push --ignore-scripts
+node --test checkys-base/test/reminders.test.cjs
+CHECKY_POCKETBASE_BINARY=/path/to/pocketbase node checkys-base/test/reminders-integration.cjs
+```
+
+The integration runner creates and removes its own disposable database under the configured temporary directory. `test/reminders-browser.cjs` uses a disposable localhost backend initialized by the existing security tests, with `CHECKY_TEST_URL`, an installed Playwright module (`CHECKY_PLAYWRIGHT_MODULE`), and optionally `CHECKY_CHROMIUM_EXECUTABLE` and `CHECKY_SCREENSHOT_DIR`. Push-provider responses/events are simulated in these regressions; verify real-device delivery after deploying to HTTPS.
+
 ### Cloudflare Tunnel and other HTTPS proxies
 
 If the browser uses HTTPS but the tunnel connects to Base over HTTP, set the public browser URL in `checkys-base/.env`:
@@ -148,7 +203,7 @@ CHECKY_PUBLIC_ORIGIN=https://checky.example.com
 
 Use your actual domain, including a port only if the browser URL uses a nonstandard port. Keep the tunnel pointed at the **web** service on port `17760` (or `web:80` on its Docker network), so the app and `/api` share one origin. Deploy the updated sources with `bash scripts/update-base.sh` or the Windows updater below. If only changing this environment setting after deploying the updated code, run `docker compose up -d pocketbase` to recreate the backend with it.
 
-For CasaOS or another container UI, add `CHECKY_PUBLIC_ORIGIN` to the **PocketBase container's environment**, then update/recreate it using an image built from these sources. Merely restarting an old image does not install the fix.
+For CasaOS or another container UI, edit the persistent `checky-config.json` above, or add `CHECKY_PUBLIC_ORIGIN` to the **PocketBase container's environment**, then update/recreate it using an image built from these sources. Merely restarting an old image does not install the fix.
 
 This setting prevents `Cross-origin session request rejected.` when an HTTPS tunnel changes the protocol or host seen by PocketBase. It pins browser session writes to that exact public origin and makes session cookies Secure for HTTPS. After setting it, use the public URL for browser sign-in; local HTTP browser sign-in is intentionally no longer accepted. Leave it blank for a local HTTP-only installation. Desktop bearer-token sync remains compatible.
 

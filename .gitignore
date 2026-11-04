@@ -25,6 +25,8 @@
 **/.npmrc
 **/.pypirc
 **/credentials.json
+**/checky-config.json
+**/checky-push-keys.json
 **/*-credentials.json
 **/service-account*.json
 **/google-services.json
@@ -69,3 +71,6 @@
 **/Thumbs.db
 **/.idea/
 **/.vscode/
+
+# Private local chat migration backup; never ship.
+/.project-chat-backup/

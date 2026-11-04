@@ -17,7 +17,12 @@ FROM alpine:3.24.3
 
 WORKDIR /pb
 
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates tzdata nodejs npm
+
+COPY push/package*.json /pb/push/
+RUN cd /pb/push && npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
+  && apk del npm && rm -rf /root/.npm
+COPY push/server.cjs /pb/push/server.cjs
 
 COPY --from=downloader /out/pocketbase /pb/pocketbase
 
@@ -26,4 +31,5 @@ COPY pb_hooks /pb/pb_hooks
 
 EXPOSE 8080
 
+ENTRYPOINT ["node", "/pb/push/server.cjs"]
 CMD ["/pb/pocketbase", "serve", "--http=0.0.0.0:8080"]
