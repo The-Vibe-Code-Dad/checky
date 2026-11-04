@@ -12,6 +12,8 @@ This file is a practical inventory of the main direct dependencies and runtime c
 | `electron-builder` | `checkys-app/` packaging | `26.18.0` | `MIT` |
 | PocketBase | `checkys-base/` and `pocketbase/` | `0.41.1` | `MIT` |
 | Caddy | `checkys-base/` web image | `2.11.7-alpine` | `Apache-2.0` |
+| `web-push` | Base and standalone PocketBase notification transport | `3.6.7` | `MIT` |
+| Node.js | PocketBase image, private notification transport | Alpine `nodejs` package | `MIT` and bundled third-party notices |
 
 ## Practical Use Notes
 
@@ -25,3 +27,4 @@ This file is a practical inventory of the main direct dependencies and runtime c
 - Electron and `electron-builder` versions/licenses were read from the installed package metadata in `checkys-app/node_modules/`.
 - PocketBase version comes from `checkys-base/.env.example` and `checkys-base/docker-compose.yml`.
 - Caddy comes from `checkys-base/web.Dockerfile`.
+- The Web Push dependency and its transitive package licenses are recorded in `checkys-base/pocketbase/push/package-lock.json` and mirrored under `pocketbase/push/`. Their upstream license files remain in the installed image dependencies.

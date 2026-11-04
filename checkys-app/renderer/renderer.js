@@ -207,6 +207,9 @@ function normalizeData(data) {
       text: typeof item?.text === "string" ? item.text : "",
       done: !!item?.done,
       completedAt: typeof item?.completedAt === "string" && item.completedAt.trim() ? item.completedAt : null,
+      reminderAt: typeof item?.reminderAt === "string" && Number.isFinite(Date.parse(item.reminderAt)) ? new Date(item.reminderAt).toISOString() : null,
+      reminderRepeat: ['daily', 'weekly', 'monthly', 'yearly'].includes(item?.reminderRepeat) ? item.reminderRepeat : 'none',
+      reminderTimeZone: typeof item?.reminderTimeZone === 'string' ? item.reminderTimeZone.slice(0, 120) : null,
       originalTabName: typeof item?.originalTabName === "string" && item.originalTabName.trim() ? item.originalTabName.trim() : null
     }));
   });

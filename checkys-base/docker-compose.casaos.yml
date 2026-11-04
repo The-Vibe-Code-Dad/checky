@@ -11,7 +11,7 @@ services:
     environment:
       TZ: Etc/UTC
       CHECKY_TRUST_PROXY: "true"
-      # Set to your public https:// origin when using an HTTPS tunnel/proxy.
+      # Optional override; otherwise edit pb_data/checky-config.json on the host.
       CHECKY_PUBLIC_ORIGIN: ""
     ports:
       - target: 8080

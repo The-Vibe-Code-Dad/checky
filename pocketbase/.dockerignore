@@ -4,3 +4,7 @@
 !pb_hooks/**
 !pb_migrations/
 !pb_migrations/**
+!push/
+!push/package.json
+!push/package-lock.json
+!push/server.cjs

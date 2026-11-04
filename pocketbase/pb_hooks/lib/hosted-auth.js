@@ -15,7 +15,7 @@ function cookieKey(e) {
   try { return e.request.cookie(COOKIE).value || "" } catch (_) { return "" }
 }
 function publicOrigin(e) {
-  const configured = $os.getenv("CHECKY_PUBLIC_ORIGIN").trim()
+  const configured = ($os.getenv("CHECKY_PUBLIC_ORIGIN").trim() || require(__hooks + '/lib/deployment-config.js').read(e.app).publicOrigin || '').trim()
   if (!configured) return ""
   // A deployment setting, never an Origin/forwarded header supplied by the caller.
   const invalid = () => new InternalServerError("CHECKY_PUBLIC_ORIGIN must be an http(s) origin without a path, credentials, query, or fragment.")
@@ -114,6 +114,7 @@ function login(e) {
 }
 function logout(e) {
   requireSameOrigin(e)
+  require(__hooks + '/lib/reminders.js').logout(e)
   const record = sessionRecord(e.app, cookieKey(e))
   if (record) e.app.delete(record)
   cookie(e, "")
@@ -143,4 +144,4 @@ function bootstrap(e) {
   // The frontend then signs in through the standard password/MFA endpoints.
   return { ok: true }
 }
-module.exports = { loadCookie, snapshot, login, logout, bootstrap }
+module.exports = { loadCookie, snapshot, login, logout, bootstrap, requireSameOrigin, stamp }

@@ -32,9 +32,18 @@ jobs:
           docker compose -f checkys-base/docker-compose.casaos.yml config --quiet
           node --test checkys-app/test/security.test.cjs
           node --test checkys-base/test/desktop-release.test.cjs
+          npm ci --prefix checkys-base/pocketbase/push --ignore-scripts --no-audit --no-fund
+          node --test checkys-base/test/reminders.test.cjs
       - name: Test fresh backend and real Base/desktop sync
         shell: pwsh
         run: ./checkys-base/test/test-security.ps1
+      - name: Test reminder scheduling and persistent public-origin config
+        run: |
+          docker create --name checky-reminder-binary checky-security-regression:local
+          docker cp checky-reminder-binary:/pb/pocketbase "$RUNNER_TEMP/checky-pocketbase"
+          docker rm checky-reminder-binary
+          chmod +x "$RUNNER_TEMP/checky-pocketbase"
+          CHECKY_POCKETBASE_BINARY="$RUNNER_TEMP/checky-pocketbase" node checkys-base/test/reminders-integration.cjs
       - name: Validate web image
         run: |
           docker build -t checky-web-regression -f checkys-base/web.Dockerfile checkys-base
