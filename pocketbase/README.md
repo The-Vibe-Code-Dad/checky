@@ -52,6 +52,10 @@ Each shared checklist record stores:
 - `updatedBy` relation to `users`
 - `version` integer used for sync conflict checks
 
+## Separately installed Baby tracker
+
+The standard backend does not install Baby tracker hooks or its collection. The extension is maintained in [`checkys-base/addons/baby-tracker`](../checkys-base/addons/baby-tracker/README.md) and can be added with its optional PocketBase image, retaining the **existing data directory and accounts**. It adds `checky_baby_entries` to that same database and checks existing personal/shared permissions on every request. Returning to a standard image removes the extension code without deleting saved entries. Full PocketBase data-directory backups include those entries; ordinary checklist JSON exports do not.
+
 ## How Sharing Works
 
 - Private use: the user works against their personal record in `checklists`.

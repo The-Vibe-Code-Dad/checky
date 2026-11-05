@@ -16,6 +16,7 @@ The hosted package currently includes:
 - `scripts/` with safe operational backup and desktop-update publishing helpers
 - `.env.example` for basic port, PocketBase version, and timezone settings
 - `checky-config.example.json` for persistent public-origin and web-reminder settings
+- `addons/` for separately installed extensions, excluded from the standard image build contexts
 
 ## How It Works
 
@@ -39,6 +40,12 @@ The hosted web app currently:
 - makes the first hosted Checky's List user the app admin and initial PocketBase superuser on a fresh stack
 - applies hosted-only login styling and branding
 - relies on a server-backed opaque session cookie instead of storing PocketBase auth tokens in the browser
+
+## Optional Baby tracker add-on
+
+Baby tracker is installed separately, like the Windows app-hosting option. Standard `latest` and `latestwapp` installations contain no tracker files, routes or migration. Installing the optional web and PocketBase variants adds the tracker to list navigation and uses the **same existing database, accounts and sharing**. It does not require another database or Base instance.
+
+Use `latestbaby` on both services, or `latestwappbaby` on web plus `latestbaby` on PocketBase to include Windows app hosting too. These tags are available only after the publishing workflow has successfully released the add-on. See the [Baby tracker installation guide](addons/baby-tracker/README.md) for CasaOS installation, updates, removal, data retention and source builds. A fresh optional installation can use [`docker-compose.casaos-baby.yml`](docker-compose.casaos-baby.yml); an existing installation should change its current image tags while retaining the active data folder and configuration.
 
 ## Quick Start
 
@@ -133,7 +140,7 @@ Open `/api/health` through the app's port `17760`, then `/api/checkys-base/sessi
 
 [Publish Docker images](https://github.com/The-Vibe-Code-Dad/checky/actions/workflows/publish-images.yml) runs on every push to `main` and can also be started manually from GitHub Actions on `main`. Pull requests run validation only. Publishing waits for the backend security tests, real Base/desktop sync tests, desktop security tests, Compose validation, and web-image configuration check.
 
-The workflow builds both architectures for each image and publishes `sha-<full-commit-sha>` tags, plus `sha-<full-commit-sha>-wapp` for the web variant with the installer. It promotes the completed images to `latest` and `latestwapp` only after all three builds have succeeded. Both web variants are tested through a fresh CasaOS stack before publication; the bundled installer is fetched through Base and checked against its signed manifest. Use matching commit tags for a fixed deployment. Database migrations may require restoring the corresponding backup when rolling back; switching image tags alone does not undo migrations.
+The workflow builds both architectures for each image and publishes `sha-<full-commit-sha>` tags, plus `sha-<full-commit-sha>-wapp` for the web variant with the installer. It promotes the completed core and optional images only after all builds have succeeded. Core images use `latest` and `latestwapp`; the separately installed Baby tracker uses `latestbaby` on web and PocketBase, with `latestwappbaby` for combined web hosting. Optional fixed tags end in `-baby` or `-wappbaby`. Core and optional variants are tested through a fresh CasaOS stack before publication; the bundled installer is fetched through Base and checked against its signed manifest. Use matching commit tags for a fixed deployment. Database migrations may require restoring the corresponding backup when rolling back; switching image tags alone does not undo migrations.
 
 Publishing uses the repository's short-lived `GITHUB_TOKEN` with package-write permission; no personal access token or signing key is required. Action versions are pinned to commit hashes. New GHCR packages default to private, so their owner must set each package's visibility to public once before users can pull without logging in. Fork maintainers must also update the workflow's repository guard, image prefix, and installer image names for their own account.
 

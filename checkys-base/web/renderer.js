@@ -178,6 +178,7 @@ const els = {
   tabs: document.getElementById("tabs"),
   list: document.getElementById("list"),
   addTabBtn: document.getElementById("addTabBtn"),
+  installedAddonLinks: document.getElementById("installedAddonLinks"),
   addItemBtn: document.getElementById("addItemBtn"),
   settingsPanel: document.getElementById("settingsPanel"),
   doneToggle: document.getElementById("doneToggle"),
@@ -280,17 +281,25 @@ function ensureDoneTabState() {
     doneTabIndex = state.data.tabs.length - 1;
   }
 
-  if (!state.settings.showDoneTab && doneTabIndex !== -1) {
-    state.data.tabs.splice(doneTabIndex, 1);
-    if (state.data.active >= state.data.tabs.length) state.data.active = state.data.tabs.length - 1;
-    state.ui.doneViewOpen = false;
-    return;
-  }
-
   if (doneTabIndex !== -1 && doneTabIndex !== state.data.tabs.length - 1) {
     const [doneTab] = state.data.tabs.splice(doneTabIndex, 1);
     state.data.tabs.push(doneTab);
     if (state.data.active === doneTabIndex) state.data.active = state.data.tabs.length - 1;
+    else if (state.data.active > doneTabIndex) state.data.active -= 1;
+    if (state.ui.lastChecklistTabIndex > doneTabIndex) state.ui.lastChecklistTabIndex -= 1;
+  }
+
+  if (state.data.tabs.every((tab) => isDoneTab(tab))) {
+    state.data.tabs.unshift({ id: createEntityId("tab"), name: "Tab 1", items: [] });
+    state.data.active += 1;
+  }
+
+  // This device's display preference must never delete synced archive data.
+  if (!state.settings.showDoneTab) {
+    state.ui.doneViewOpen = false;
+    if (isDoneTab(state.data.tabs[state.data.active])) {
+      state.data.active = getSafeChecklistTabIndex();
+    }
   }
 }
 
@@ -760,9 +769,7 @@ async function loadAvailableChecklists() {
     state.assignedChecklistId = typeof result?.assignedChecklistId === "string" ? result.assignedChecklistId : "";
     state.currentChecklistId = typeof result?.currentChecklistId === "string" ? result.currentChecklistId : "";
     state.ui.availableChecklistsMessage = "";
-    if (result?.settings) {
-      state.settings = normalizeSettings(result.settings);
-    }
+    // The response carries settings from before the request. Keep newer local choices.
     if (typeof result?.dataLocation === "string") {
       state.dataLocation = result.dataLocation;
     }
@@ -1271,7 +1278,7 @@ function moveItemByOffset(tabIndex, itemIndex, offset) {
 
 function markItemDone(tabIndex, itemIndex) {
   const doneTabIndex = getDoneTabIndex();
-  if (doneTabIndex === -1) {
+  if (!state.settings.showDoneTab || doneTabIndex === -1) {
     const item = state.data.tabs[tabIndex]?.items[itemIndex];
     if (!item) return;
     item.done = true; item.reminderCheckedAt = null; item.reminderResetAt = null;
@@ -1359,6 +1366,46 @@ function isItemDeleteConfirmPending(tabIndex, itemIndex) {
   return state.ui.itemDeleteConfirmIndex?.tabIndex === tabIndex && state.ui.itemDeleteConfirmIndex?.itemIndex === itemIndex;
 }
 
+let installedAddons = [];
+async function loadInstalledAddons() {
+  installedAddons = [];
+  const account = state.hostedSession.user.id;
+  if (!state.hostedSession.authenticated) { renderInstalledAddons(); return; }
+  try {
+    const response = await fetch('./addons.json', { cache: 'no-store', credentials: 'same-origin', signal: AbortSignal.timeout(10000) });
+    const manifest = response.ok ? await response.json() : [];
+    const candidates = Array.isArray(manifest) ? manifest.slice(0, 16) : [];
+    const available = await Promise.all(candidates.map(async addon => {
+      if (!addon || !/^[a-z0-9-]{1,60}$/.test(addon.id) || typeof addon.name !== 'string' ||
+          !/^\/[a-z0-9-]+(?:\/[a-z0-9-]+)*\/$/.test(addon.href) || !/^\/api\/checkys-base\/[a-z0-9/-]+$/.test(addon.probe)) return null;
+      try {
+        const check = await fetch(addon.probe, { cache: 'no-store', credentials: 'same-origin', signal: AbortSignal.timeout(10000) });
+        return check.ok && (await check.json()).installed === true ? addon : null;
+      } catch (_) { return null; }
+    }));
+    if (state.hostedSession.user.id === account) installedAddons = available.filter(Boolean);
+  } catch (_) { /* A standard installation has no add-ons. */ }
+  renderInstalledAddons();
+}
+
+function renderInstalledAddons() {
+  els.installedAddonLinks.replaceChildren();
+  for (const addon of installedAddons) {
+    const button = document.createElement('button');
+    button.type = 'button'; button.className = 'tab addon-link';
+    button.dataset.addonId = addon.id;
+    button.textContent = addon.name.slice(0, 120);
+    button.disabled = state.ui.syncInProgress || !state.currentChecklistId;
+    button.onclick = async () => {
+      if (!await flushPendingSave()) { setStatus('Could not save your checklist. Try again before opening the add-on.', true); return; }
+      const url = new URL(addon.href, location.origin);
+      url.searchParams.set('list', state.currentChecklistId);
+      location.assign(url.href);
+    };
+    els.installedAddonLinks.append(button);
+  }
+}
+
 function renderSettings() {
   const activeTab = state.data.tabs[state.data.active];
   const specialViewTitle = state.ui.settingsViewOpen ? "Settings" : "Done list";
@@ -1376,6 +1423,8 @@ function renderSettings() {
   }
   renderChecklistPicker();
   els.doneSearchInput.value = state.ui.doneSearch;
+  ensureNavigationPreferences();
+  renderInstalledAddons();
   els.dataLocation.textContent = state.dataLocation || "Device local cache only";
   els.syncNowBtn.disabled = state.ui.syncInProgress;
   els.syncNowBtn.textContent = state.ui.syncInProgress ? "Syncing..." : "Pull latest";
@@ -1982,6 +2031,7 @@ async function submitHostedLogin() {
 
     const loginResult = await window.checkyStorage.signInHostedSession(email, password);
     state.hostedSession = normalizeHostedSession(loginResult?.hostedSession);
+    void loadInstalledAddons();
     await loadAvailableChecklists();
     if (state.availableChecklists.length === 0) {
       setLoginStatus(state.ui.availableChecklistsMessage || "No accessible checklists are available for this account.", true);
@@ -2377,6 +2427,10 @@ async function init() {
   render();
   window.checkyPrepareForUpdate = prepareForAppUpdate;
   void window.checkyReminders?.init(state.hostedSession.user.id);
+  void loadInstalledAddons();
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) void loadInstalledAddons();
+  });
   if (navigator.onLine && hasHostedLoginCredentials()) {
     setTimeout(async () => {
       await runManualSync("startup");

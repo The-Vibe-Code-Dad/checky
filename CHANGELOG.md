@@ -294,6 +294,28 @@ base:
 - Made Mark done work with the Done archive disabled and added explanatory reminder text and migration guidance for previously checked items.
 - Verified actual browser checks and live resets, permanent completion, server scheduling/delivery/deduplication, calendar boundaries, sync/security and installed-app updates.
 
+## v0059 - 2026-11-05
+- Added an optional Baby tracker add-on inside Base, off by default. Enable it in Settings to show it under the selected list's tabs; the account/device preference can hide it again without deleting entries.
+- Added a newest-first feeding and diaper log with automatic editable date/time, breast milk and formula amounts in ml or US fluid oz, feeding notes, and separate pee/poop checkboxes and notes. Unit changes preserve the stored ml amount.
+- Reused Base sign-in and personal/shared list access with separate PocketBase entry records, version checks for concurrent edits, retry-safe creation, pagination and explicit deletion. Saving needs a connection; failed saves keep the open form.
+- Included the add-on in versioned web builds/PWA caching, documented deployment and full-database backups, and added real PocketBase/browser checks to CI. Verified permissions, revocation, persistence, conversion, phone layout, conflicts and offline failure handling.
+
+## v0060 - 2026-11-05
+- Removed the “Optional add-on” label above the Baby tracker title. The tracker remains off by default and can be enabled in Settings.
+
+## v0061 - 2026-11-05
+- Repackaged Baby tracker as a separately installed extension under `checkys-base/addons/baby-tracker`, following the optional Windows app-hosting image pattern. Standard Base and standalone PocketBase images no longer contain its UI, routes or migration.
+- Added optional `latestbaby` web/backend variants and `latestwappbaby` for combined Windows app hosting, a CasaOS installer and a source-build overlay. All variants keep the existing services, database, accounts, sharing and data mount.
+- Replaced the built-in enable switch with installed-add-on discovery in list navigation. The link appears only when both the add-on web package and backend are present; tracker assets are versioned separately from the normal PWA cache.
+- Verified fresh core installs have no tracker collection, and installing/removing/reinstalling the extension preserves accounts, lists and baby entries in one real database. Updated browser/packaging tests and added standard/optional Docker image checks to publishing. Docker builds still require the CI/Docker host; this machine has no Docker engine.
+- Core app-update browser checks passed, but the broader runner currently stops at the Done archive assertion after those checks; that separate regression remains unresolved. Add-on browser/install tests and all eight packaging/auth unit tests passed.
+
+## v0062 - 2026-11-05
+- Fixed Base deleting the Done archive when this device's Show Done archive preference was off. Hidden archives now retain their tabs, completed items and IDs through edits, reloads and sync, matching desktop's existing data-preservation behavior.
+- Stopped delayed checklist-folder refreshes from reverting newer local settings, which could turn Done off shortly after enabling it.
+- Returned to an ordinary checklist when hiding the active archive, preserved the selected checklist when moving the archive to the end, and handled imports containing only an archive. Mark done still completes items in place while archiving is disabled.
+- Added and passed a browser regression in the existing PWA suite covering delayed folder responses, a fresh second device with Done hidden, real PocketBase saves/sync, hide/show toggles and archive-only imports. The complete PWA browser suite and web build/cache checks passed, resolving the Done regression noted in v0061.
+
 desktop:
 
 ## v0001 - 2026-04-07
@@ -555,3 +577,11 @@ pocketbase:
 
 ## v0036 - 2026-11-05
 - Mirrored per-occurrence checkbox completion, authoritative next-occurrence timestamps, backward-compatible completion preservation and recurring delivery after a checked occurrence, without background checklist version changes.
+
+## v0037 - 2026-11-05
+- Mirrored the Baby tracker collection migration and authenticated add-on routes from Base. Personal/shared permissions are checked through the existing parent checklist rules; direct collection access is locked.
+- Kept baby logs outside checklist JSON so older clients and ordinary checklist imports/resets do not overwrite them. Added per-entry conflict checks, retry-safe creation, bounded notes/amount validation and stable log pagination; documented full-data backup coverage.
+
+## v0038 - 2026-11-05
+- Removed Baby tracker code/migration from the default standalone backend. The separately installed Base add-on package can extend that backend image while reusing its current database and accounts.
+- Documented that removing extension code retains existing log records, and that a full database backup includes add-on data.
