@@ -50,3 +50,24 @@ test('service worker displays push after all app windows close and restricts not
   handlers.notificationclick({ notification: { close() {}, data: { url: 'https://evil.example/' } }, waitUntil() { throw Error('External link must be rejected'); } });
 });
 module.exports = { subscription };
+
+test('a repeating check expires for the next occurrence; Mark done and one-off checks stay completed', () => {
+  const { isChecked, setChecked, mergeResetTimes } = require('../web/reminder-state.js');
+  const item = { id: 'item', reminderAt: '2030-01-01T09:00:00.000Z', reminderRepeat: 'daily', reminderTimeZone: 'UTC', reminderDays: null };
+  setChecked(item, true, Date.parse('2030-01-01T10:00:00Z'));
+  assert.equal(isChecked(item, Date.parse('2030-01-03T10:00:00Z')), true, 'Stay checked until the schedule is synced');
+  item.reminderResetAt = '2030-01-02T09:00:00.000Z';
+  assert.equal(isChecked(item, Date.parse('2030-01-02T08:59:59Z')), true);
+  assert.equal(isChecked(item, Date.parse('2030-01-02T09:00:00Z')), false);
+  assert.equal(item.done, true, 'The reset must not mutate stored completion or create a sync edit');
+  const old = { tabs: [{ id: 'tab', items: [{ ...item }] }] };
+  setChecked(item, true, Date.parse('2030-01-02T10:00:00Z'));
+  const current = { tabs: [{ id: 'tab', items: [item] }] };
+  assert.equal(mergeResetTimes(current, old), false, 'A late response must not replace a newer completion');
+  item.reminderCheckedAt = null; item.reminderResetAt = null;
+  assert.equal(isChecked(item, Date.parse('2031-01-01')), true, 'Explicit Mark done stops the series');
+  item.reminderRepeat = 'none'; setChecked(item, true);
+  assert.equal(item.reminderCheckedAt, null);
+  assert.equal(isChecked(item), true);
+  setChecked(item, false); assert.equal(isChecked(item), false);
+});

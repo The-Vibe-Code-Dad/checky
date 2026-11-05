@@ -40,14 +40,15 @@ async function browser(email) {
       const r=await direct(url,{...opts,headers:{...opts.headers,...(cookie?{Cookie:cookie}:{}),Origin:base}});
       if(r.headers.get('set-cookie')) cookie=r.headers.get('set-cookie').split(';')[0]; return r;
     }});
-  for(const file of ['auth-client.js','mobile-storage.js']) vm.runInContext(await fs.readFile(path.join(root,'checkys-base/web',file),'utf8'),context,{filename:file});
+  for(const file of ['auth-client.js','reminder-state.js','mobile-storage.js']) vm.runInContext(await fs.readFile(path.join(root,'checkys-base/web',file),'utf8'),context,{filename:file});
   const storage=window.checkyStorage;
   await storage.signInHostedSession(email,password);
   return storage;
 }
 const textOf = checklist=>checklist.tabs[0].items[0]?.text;
 const reminderAt = '2030-01-02T15:04:00.000Z';
-const data = text=>({active:0,tabs:[{id:'stable-tab',name:'Tasks',items:[{id:'stable-task',text,done:false,reminderAt,reminderRepeat:'weekly',reminderTimeZone:'America/New_York',reminderDays:[1,3,5]}]}]});
+const reminderCheckedAt = '2030-01-02T16:00:00.000Z';
+const data = text=>({active:0,tabs:[{id:'stable-tab',name:'Tasks',items:[{id:'stable-task',text,done:true,reminderAt,reminderRepeat:'weekly',reminderTimeZone:'America/New_York',reminderDays:[1,3,5],reminderCheckedAt}]}]});
 (async()=>{
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'checky-client-test-'));
   try {
@@ -64,6 +65,8 @@ const data = text=>({active:0,tabs:[{id:'stable-tab',name:'Tasks',items:[{id:'st
     assert.equal(state.checklist.tabs[0].items[0].reminderRepeat, 'weekly');
     assert.equal(state.checklist.tabs[0].items[0].reminderTimeZone, 'America/New_York');
     assert.deepEqual(Array.from(state.checklist.tabs[0].items[0].reminderDays), [1,3,5]);
+    assert.equal(state.checklist.tabs[0].items[0].reminderCheckedAt, reminderCheckedAt);
+    assert.equal(state.checklist.tabs[0].items[0].reminderResetAt, '2030-01-04T15:04:00.000Z');
     await web.saveChecklist(data('personal from Base'));
     state=await web.syncNow(data('personal from Base')); assert.equal(state.ok,true,state.message);
     pulled=await desk.pullChecklistFromRemote(); assert.equal(textOf(pulled.checklist),'personal from Base');
@@ -71,6 +74,8 @@ const data = text=>({active:0,tabs:[{id:'stable-tab',name:'Tasks',items:[{id:'st
     assert.equal(pulled.checklist.tabs[0].items[0].reminderRepeat, 'weekly');
     assert.equal(pulled.checklist.tabs[0].items[0].reminderTimeZone, 'America/New_York');
     assert.deepEqual(Array.from(pulled.checklist.tabs[0].items[0].reminderDays), [1,3,5]);
+    assert.equal(pulled.checklist.tabs[0].items[0].reminderCheckedAt, reminderCheckedAt);
+    assert.equal(pulled.checklist.tabs[0].items[0].reminderResetAt, '2030-01-04T15:04:00.000Z');
     console.log('PASS real Base and desktop personal sync in both directions');
     const shared=await api('/api/collections/shared_checklists/records',{shareKey:'client-'+Date.now(),name:'Client shared',owner:user.id,version:1,data:data('shared seed')},admin.token);
     await api('/api/collections/users/records/'+user.id,{assignedSharedChecklist:shared.id},admin.token,'PATCH');

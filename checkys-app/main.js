@@ -1,5 +1,6 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, Tray, Menu, nativeImage, safeStorage, shell, session } = require("electron");
 const crypto = require("crypto");
+const reminderState = require("./renderer/reminder-state.js");
 const fs = require("fs/promises");
 const path = require("path");
 const { verifyManifest, requireHttps, readBoundedBody } = require('./lib/desktop-update.cjs');
@@ -206,6 +207,8 @@ function normalizeChecklist(data) {
       reminderRepeat: ['daily', 'weekly', 'monthly', 'yearly'].includes(item?.reminderRepeat) ? item.reminderRepeat : 'none',
       reminderTimeZone: typeof item?.reminderTimeZone === 'string' ? item.reminderTimeZone.slice(0, 120) : null,
       reminderDays: Array.isArray(item?.reminderDays) ? [...new Set(item.reminderDays.filter(day => Number.isInteger(day) && day >= 0 && day <= 6))].sort() : null,
+      reminderCheckedAt: typeof item?.reminderCheckedAt === 'string' && Number.isFinite(Date.parse(item.reminderCheckedAt)) ? new Date(item.reminderCheckedAt).toISOString() : null,
+      reminderResetAt: typeof item?.reminderResetAt === 'string' && Number.isFinite(Date.parse(item.reminderResetAt)) ? new Date(item.reminderResetAt).toISOString() : null,
       originalTabName: sanitizeSingleLineText(item?.originalTabName, MAX_TAB_NAME_LENGTH) || null
     }));
   });
@@ -805,7 +808,7 @@ async function restoreBackup(name) {
 }
 
 function getChecklistSignature(checklist) {
-  return JSON.stringify(cloneValue(normalizeChecklist(checklist)));
+  return JSON.stringify(cloneValue(normalizeChecklist(checklist)), (key, value) => key === 'reminderResetAt' ? undefined : value);
 }
 
 async function getCachedChecklist() {
@@ -1827,6 +1830,11 @@ async function pushChecklistToRemote(checklist, options = {}) {
       version: nextVersion,
       userId
     });
+  }
+  if (updated && typeof updated === 'object') {
+    const acknowledged = extractChecklistData(updated);
+    reminderState.mergeResetTimes(normalizedChecklist, acknowledged);
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('reminder:reset-times', { recordRef, checklist: acknowledged });
   }
   await clearDirtyIfChecklistStillCurrent(normalizedChecklist);
   await writeSyncMeta({ baseChecklist: normalizedChecklist });

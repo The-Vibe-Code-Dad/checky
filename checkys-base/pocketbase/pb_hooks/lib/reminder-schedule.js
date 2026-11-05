@@ -65,4 +65,43 @@ function latestOccurrence(item, now) {
   } catch (_) { /* Invalid imported schedules must not stop other reminders. */ }
   return NaN
 }
-module.exports = { latestOccurrence }
+function nextOccurrence(item, after) {
+  const first = Date.parse(item.reminderAt)
+  if (!Number.isFinite(first) || !Number.isFinite(after) || !['daily', 'weekly', 'monthly', 'yearly'].includes(item.reminderRepeat)) return NaN
+  try {
+    const name = item.reminderTimeZone, zone = new Timezone(name)
+    if (!name || name === 'Local' || zone.string() !== name) return NaN
+    const anchor = new DateTime(new Date(first).toISOString()).time().in(zone)
+    const current = new DateTime(new Date(Math.max(first, after)).toISOString()).time().in(zone)
+    const year = anchor.year(), month = Number(anchor.month()), day = anchor.day(), repeat = item.reminderRepeat
+    const anchorDay = Date.UTC(year, month - 1, day)
+    const currentDay = Date.UTC(current.year(), Number(current.month()) - 1, current.day())
+    const clock = anchor.format('15:04:05.000')
+    function instant(date) {
+      if (date.getTime() === anchorDay) return first
+      const wall = date.toISOString().slice(0, 10) + ' ' + clock
+      const time = new DateTime(wall, name).time()
+      return time.in(zone).format('2006-01-02 15:04:05.000') === wall ? time.unixMilli() : NaN
+    }
+    if (repeat === 'daily' || repeat === 'weekly') {
+      const days = item.reminderDays == null ? [new Date(anchorDay).getUTCDay()] : item.reminderDays
+      if (repeat === 'weekly' && (!Array.isArray(days) || !days.length || days.some(day => !Number.isInteger(day) || day < 0 || day > 6))) return NaN
+      for (let offset = 0; offset <= 14; offset++) {
+        const date = new Date(currentDay + offset * 86400000)
+        if (repeat === 'weekly' && !days.includes(date.getUTCDay())) continue
+        const at = instant(date)
+        if (at >= first && at > after) return at
+      }
+    } else {
+      const index = repeat === 'monthly' ? (current.year() - year) * 12 + Number(current.month()) - month : current.year() - year
+      for (let n = Math.max(0, index); n <= index + 2; n++) {
+        const date = new Date(Date.UTC(year + (repeat === 'yearly' ? n : 0), month - 1 + (repeat === 'monthly' ? n : 0), 1))
+        date.setUTCDate(Math.min(day, new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate()))
+        const at = instant(date)
+        if (at >= first && at > after) return at
+      }
+    }
+  } catch (_) {}
+  return NaN
+}
+module.exports = { latestOccurrence, nextOccurrence }

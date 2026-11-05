@@ -66,11 +66,16 @@ function dueItems(data, now, enabledAt) {
   for (const tab of data?.tabs || []) {
     if (tab.system === 'done') continue
     for (const item of tab.items || []) {
-      if (!item?.id || item.done || typeof item.reminderAt !== 'string') continue
+      if (!item?.id || typeof item.reminderAt !== 'string') continue
       const at = item.reminderRepeat && item.reminderRepeat !== 'none'
         ? require(__hooks + '/lib/reminder-schedule.js').latestOccurrence(item, now)
         : Date.parse(item.reminderAt)
-      if (!item?.id || item.done || !Number.isFinite(at) || at > now || at < enabledAt || at < now - 86400000) continue
+      if (!Number.isFinite(at) || at > now || at < enabledAt || at < now - 86400000) continue
+      // A checked repeating item reopens for its next occurrence without a
+      // background database write/version bump that could conflict with edits.
+      const checkedAt = Date.parse(item.reminderCheckedAt)
+      const repeating = ['daily', 'weekly', 'monthly', 'yearly'].includes(item.reminderRepeat)
+      if (item.done && (!repeating || !Number.isFinite(checkedAt) || at <= checkedAt)) continue
       due.push({ id: item.id, at: new Date(at).toISOString(), text: String(item.text || 'Checklist event').slice(0, 160), tab: String(tab.name || '').slice(0, 120) })
     }
   }

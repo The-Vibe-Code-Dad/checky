@@ -77,6 +77,21 @@ async function main() {
     });
     await page.locator('#addItemBtn').click();
     await page.locator('#list textarea').fill('Keep this checklist');
+    await page.evaluate(() => {
+      const item = state.data.tabs[state.data.active].items[0];
+      Object.assign(item, {reminderAt:new Date(Date.now()+4000).toISOString(), reminderRepeat:'daily', reminderTimeZone:'UTC', reminderDays:null});
+      renderItems();
+    });
+    await page.locator('#list input[type="checkbox"]').check();
+    await page.waitForFunction(() => !!state.data.tabs[state.data.active].items[0].reminderResetAt);
+    await page.waitForFunction(() => !document.querySelector('#list input[type="checkbox"]').checked);
+    assert.equal(await page.evaluate(() => state.data.tabs[state.data.active].items[0].done), true, 'Visual reset must not create a background write');
+    await page.locator('#list textarea').click({ button: 'right' });
+    await page.locator('#itemContextMenu').getByRole('button', {name:'Mark done', exact:true}).click();
+    assert.equal(await page.locator('#list input[type="checkbox"]').isChecked(), true);
+    assert.equal(await page.evaluate(() => state.data.tabs[state.data.active].items[0].reminderCheckedAt), null);
+    await page.locator('#list input[type="checkbox"]').uncheck();
+    console.log('PASS repeating checkbox acknowledgement, live automatic reset and permanent Mark done without an archive');
     const other = await context.newPage(); await other.goto(origin);
     await other.waitForFunction(() => !!state.currentChecklistId && !state.ui.syncInProgress);
     await other.locator('#list textarea').evaluate(el => { el.value = 'Other window draft'; });

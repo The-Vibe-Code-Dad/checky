@@ -211,6 +211,8 @@ function normalizeData(data) {
       reminderRepeat: ['daily', 'weekly', 'monthly', 'yearly'].includes(item?.reminderRepeat) ? item.reminderRepeat : 'none',
       reminderTimeZone: typeof item?.reminderTimeZone === 'string' ? item.reminderTimeZone.slice(0, 120) : null,
       reminderDays: Array.isArray(item?.reminderDays) ? [...new Set(item.reminderDays.filter(day => Number.isInteger(day) && day >= 0 && day <= 6))].sort() : null,
+      reminderCheckedAt: typeof item?.reminderCheckedAt === 'string' && Number.isFinite(Date.parse(item.reminderCheckedAt)) ? new Date(item.reminderCheckedAt).toISOString() : null,
+      reminderResetAt: typeof item?.reminderResetAt === 'string' && Number.isFinite(Date.parse(item.reminderResetAt)) ? new Date(item.reminderResetAt).toISOString() : null,
       originalTabName: typeof item?.originalTabName === "string" && item.originalTabName.trim() ? item.originalTabName.trim() : null
     }));
   });
@@ -1208,6 +1210,13 @@ function markItemDone(sourceTabIndex, itemIndex) {
   const doneTabIndex = getDoneTabIndex();
   const sourceTab = state.data.tabs[sourceTabIndex];
   const doneTab = doneTabIndex === -1 ? null : state.data.tabs[doneTabIndex];
+  if (sourceTab && !doneTab) {
+    const item = sourceTab.items?.[itemIndex];
+    if (!item) return;
+    syncVisibleItemsToState();
+    item.done = true; item.reminderCheckedAt = null; item.reminderResetAt = null;
+    render(); persistChecklistImmediately(); return;
+  }
   if (!sourceTab || !doneTab || !Array.isArray(sourceTab.items) || !Array.isArray(doneTab.items)) return;
   if (itemIndex < 0 || itemIndex >= sourceTab.items.length) return;
 
@@ -1220,6 +1229,8 @@ function markItemDone(sourceTabIndex, itemIndex) {
 
   const stamp = `Completed: ${formatDoneTimestamp()}`;
   item.done = true;
+  item.reminderCheckedAt = null;
+  item.reminderResetAt = null;
   item.completedAt = new Date().toISOString();
   item.originalTabName = sourceTab.name;
   item.text = item.text.trim() ? `${item.text}\n${stamp}` : stamp;
@@ -1252,6 +1263,8 @@ function undoDoneItem(itemIndex) {
   }
 
   item.done = false;
+  item.reminderCheckedAt = null;
+  item.reminderResetAt = null;
   item.completedAt = null;
   item.text = stripDoneStamp(item.text);
   item.originalTabName = null;
@@ -1620,9 +1633,9 @@ function renderItems() {
 
     const check = document.createElement("input");
     check.type = "checkbox";
-    check.checked = !!item.done;
+    check.checked = window.checkyReminderState.isChecked(item);
     check.onchange = () => {
-      item.done = check.checked;
+      window.checkyReminderState.setChecked(item, check.checked);
       persistChecklistImmediately();
     };
 
@@ -2232,3 +2245,19 @@ window.checkyApi.onVerificationCodeRequested(async ({id, email}) => {
   const code = await window.requestCheckyVerificationCode(email);
   await window.checkyApi.submitVerificationCode(id, code);
 });
+
+function refreshRepeatingCheckboxes() {
+  if (document.visibilityState === 'hidden' || state.ui.settingsOpen || state.ui.doneViewOpen) return;
+  const tab = state.data.tabs[state.data.active];
+  for (const row of els.list.querySelectorAll('.item')) {
+    const item = tab?.items[Number(row.dataset.itemIndex)], checkbox = row.querySelector('input[type="checkbox"]');
+    if (item && checkbox) checkbox.checked = window.checkyReminderState.isChecked(item);
+  }
+}
+window.checkyApi.onReminderResetTimes(({ recordRef, checklist }) => {
+  if (recordRef !== state.currentChecklistId) return;
+  window.checkyReminderState.mergeResetTimes(state.data, checklist);
+  refreshRepeatingCheckboxes();
+});
+setInterval(refreshRepeatingCheckboxes, 1000);
+document.addEventListener('visibilitychange', refreshRepeatingCheckboxes);
