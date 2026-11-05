@@ -4,3 +4,6 @@ routerAdd('GET', '/api/checkys-base/baby/entries', (e) => require(__hooks + '/li
 routerAdd('POST', '/api/checkys-base/baby/entries', (e) => require(__hooks + '/lib/baby-tracker.js').create(e))
 routerAdd('PATCH', '/api/checkys-base/baby/entries/{id}', (e) => require(__hooks + '/lib/baby-tracker.js').update(e))
 routerAdd('DELETE', '/api/checkys-base/baby/entries/{id}', (e) => require(__hooks + '/lib/baby-tracker.js').remove(e))
+routerAdd('GET', '/api/checkys-base/baby/admin/users', (e) => require(__hooks + '/lib/baby-tracker.js').users(e))
+routerAdd('POST', '/api/checkys-base/baby/lists', (e) => require(__hooks + '/lib/baby-tracker.js').createList(e))
+routerAdd('PATCH', '/api/checkys-base/baby/lists/{id}', (e) => require(__hooks + '/lib/baby-tracker.js').updateList(e))

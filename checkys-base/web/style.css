@@ -9,7 +9,11 @@
   --danger-2:#963737;
   --text:#ffffff;
 }
-.addon-link{width:100%;margin-top:8px;text-align:left;font:inherit;min-height:44px;color:var(--text)}
+.addon-link{width:100%;text-align:left;font:inherit;min-height:44px;color:var(--text)}
+.installed-addon-links:not(:empty){margin-top:10px}
+.addon-view{flex:1;min-height:0}
+.addon-view iframe{display:block;border:0;width:100%;height:100%;background:var(--bg)}
+.addon-open .content-scroll{display:flex;flex-direction:column;padding:0;overflow:hidden}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{
   height:100%;

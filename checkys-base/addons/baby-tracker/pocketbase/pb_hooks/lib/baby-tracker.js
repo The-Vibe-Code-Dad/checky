@@ -1,27 +1,63 @@
 const COLLECTION = 'checky_baby_entries'
+const LISTS = 'checky_baby_lists'
 function auth(e) {
   e.response.header().set('Cache-Control', 'no-store')
   if (!e.auth || e.auth.collection().name !== 'users') throw new UnauthorizedError('Sign in to open the baby tracker.')
   require(__hooks + '/lib/hosted-auth.js').requireSameOrigin(e)
 }
-function canUse(app, e, record, write) {
-  const info = e.requestInfo()
-  // Checklist update rules also require a newer JSON version. Evaluate the
-  // equivalent update request without changing the parent checklist itself.
-  info.body = write ? { version: record.getInt('version') + 1 } : {}
-  info.method = write ? 'PATCH' : 'GET'
-  return app.canAccessRecord(record, info, write ? record.collection().updateRule : record.collection().viewRule)
+function isAdmin(app, user) {
+  try { return app.findFirstRecordByData('checky_base_admins', 'key', 'primary').getString('user') === user.id } catch (_) { return false }
 }
-function parent(app, e, ref, write = false) {
-  const match = /^(checklists|shared_checklists):([a-z0-9]{15})$/.exec(String(ref || ''))
-  if (!match) throw new BadRequestError('Choose a personal or shared list.')
+function requireAdmin(app, e) {
+  if (!isAdmin(app, e.auth)) throw new ForbiddenError('Only the Checky admin can manage baby lists and caregivers.')
+}
+function parent(app, e, ref) {
+  const match = /^checky_baby_lists:([a-z0-9]{15})$/.exec(String(ref || ''))
+  if (!match) throw new BadRequestError('Choose a baby list assigned by your admin.')
   let record
-  try { record = app.findRecordById(match[1], match[2]) } catch (_) { throw new NotFoundError('This list is unavailable.') }
-  if (!canUse(app, e, record, write)) throw new NotFoundError('This list is unavailable.')
-  return { record, field: match[1] === 'checklists' ? 'personalChecklist' : 'sharedChecklist', ref: match[0] }
+  try { record = app.findRecordById(LISTS, match[1]) } catch (_) { throw new NotFoundError('This baby list is unavailable.') }
+  if (!isAdmin(app, e.auth) && !Array.from(record.getStringSlice('members')).includes(e.auth.id)) throw new NotFoundError('This baby list is unavailable. Ask your admin to add you.')
+  return { record, field: 'babyList', ref: match[0] }
 }
-function entryParent(record) {
-  return record.getString('personalChecklist') ? 'checklists:' + record.getString('personalChecklist') : 'shared_checklists:' + record.getString('sharedChecklist')
+function entryParent(record) { return LISTS + ':' + record.getString('babyList') }
+function serializeList(record, admin) {
+  const item = { ref: LISTS + ':' + record.id, name: record.getString('name'), writable: true }
+  if (admin) { item.version = record.getInt('version'); item.members = Array.from(record.getStringSlice('members')) }
+  return item
+}
+function lists(e) {
+  auth(e)
+  const admin = isAdmin(e.app, e.auth)
+  const records = e.app.findRecordsByFilter(LISTS, admin ? '' : 'members.id ?= {:user}', 'name,id', 0, 0, { user: e.auth.id })
+  return e.json(200, { items: records.map(record => serializeList(record, admin)), canManage: admin })
+}
+function users(e) {
+  auth(e); requireAdmin(e.app, e)
+  return e.json(200, { items: e.app.findRecordsByFilter('users', '', 'email,id', 0, 0).map(record => ({ id: record.id, email: record.getString('email') })) })
+}
+function saveList(e, creating) {
+  auth(e); requireAdmin(e.app, e)
+  const body = e.requestInfo().body || {}
+  const name = typeof body.name === 'string' ? body.name.trim() : ''
+  if (!name || name.length > 120 || /[\u0000-\u001F\u007F]/.test(name)) throw new BadRequestError('Enter a baby list name of 1–120 characters.')
+  if (!Array.isArray(body.members) || body.members.length > 1000 || body.members.some(id => typeof id !== 'string' || !/^[a-z0-9]{15}$/.test(id))) throw new BadRequestError('Choose valid Checky users.')
+  const members = [...new Set(body.members)]
+  let result
+  e.app.runInTransaction(app => {
+    requireAdmin(app, e)
+    for (const id of members) {
+      try { app.findRecordById('users', id) } catch (_) { throw new BadRequestError('One of these users no longer exists. Reopen the list and try again.') }
+    }
+    let record
+    if (creating) record = new Record(app.findCollectionByNameOrId(LISTS))
+    else {
+      try { record = app.findRecordById(LISTS, e.request.pathValue('id')) } catch (_) { throw new NotFoundError('This baby list is unavailable.') }
+      if (record.getInt('version') !== body.version) throw new ApiError(409, 'This baby list changed. Reopen it before saving caregivers again.')
+    }
+    record.set('name', name); record.set('members', members); record.set('version', creating ? 1 : record.getInt('version') + 1)
+    app.save(record); result = serializeList(record, true)
+  })
+  return e.json(200, result)
 }
 function payload(value) {
   const data = value && typeof value === 'object' && !Array.isArray(value) ? value : {}
@@ -47,21 +83,6 @@ function payload(value) {
 function serialize(record) {
   return { id: record.id, version: record.getInt('version'), entry: JSON.parse(record.getString('data')) }
 }
-function lists(e) {
-  auth(e)
-  const items = []
-  for (const collection of ['checklists', 'shared_checklists']) {
-    const filter = collection === 'checklists' ? 'owner = {:user}' : 'owner = {:user} || sharedWith.id ?= {:user}'
-    for (const record of e.app.findRecordsByFilter(collection, filter, 'name,id', 0, 0, { user: e.auth.id })) {
-      if (!canUse(e.app, e, record, false)) continue
-      items.push({ ref: collection + ':' + record.id, name: record.getString('name') || (collection === 'checklists' ? 'Personal' : 'Shared'),
-        shared: collection === 'shared_checklists', writable: canUse(e.app, e, record, true) })
-    }
-  }
-  const assigned = e.auth.getString('assignedSharedChecklist')
-  const preferred = assigned ? 'shared_checklists:' + assigned : 'checklists:' + e.auth.getString('defaultChecklist')
-  return e.json(200, { items, preferred })
-}
 function list(e) {
   auth(e)
   const query = e.request.url.query()
@@ -86,7 +107,7 @@ function create(e) {
   if (typeof body.requestId !== 'string' || !/^[a-zA-Z0-9-]{16,80}$/.test(body.requestId)) throw new BadRequestError('A save identifier is required.')
   let saved
   e.app.runInTransaction(app => {
-    const scope = parent(app, e, body.list, true)
+    const scope = parent(app, e, body.list)
     let record
     try { record = app.findFirstRecordByData(COLLECTION, 'requestId', body.requestId) } catch (_) {}
     if (record) {
@@ -111,7 +132,7 @@ function mutate(e, deleting) {
   e.app.runInTransaction(app => {
     let record
     try { record = app.findRecordById(COLLECTION, e.request.pathValue('id')) } catch (_) { throw new NotFoundError('This entry is unavailable.') }
-    parent(app, e, entryParent(record), true)
+    parent(app, e, entryParent(record))
     if (body.version !== record.getInt('version')) throw new ApiError(409, 'Another caregiver changed this entry. Cancel and refresh the log before editing it again.')
     if (deleting) { app.delete(record); saved = { ok: true }; return }
     record.set('occurredAt', data.occurredAt); record.set('data', data); record.set('version', body.version + 1)
@@ -119,4 +140,4 @@ function mutate(e, deleting) {
   })
   return e.json(200, saved)
 }
-module.exports = { status: e => { auth(e); return e.json(200, { installed: true }) }, lists, list, create, update: e => mutate(e, false), remove: e => mutate(e, true) }
+module.exports = { status: e => { auth(e); return e.json(200, { installed: true }) }, lists, users, createList: e => saveList(e, true), updateList: e => saveList(e, false), list, create, update: e => mutate(e, false), remove: e => mutate(e, true) }

@@ -1,8 +1,9 @@
 [
   {
     "id": "baby-tracker",
-    "name": "Baby tracker",
+    "name": "Baby",
     "href": "/baby/",
-    "probe": "/api/checkys-base/baby/status"
+    "probe": "/api/checkys-base/baby/status",
+    "lists": "/api/checkys-base/baby/lists"
   }
 ]
