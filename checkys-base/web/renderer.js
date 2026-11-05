@@ -243,6 +243,8 @@ function normalizeData(data) {
       reminderRepeat: ['daily', 'weekly', 'monthly', 'yearly'].includes(item?.reminderRepeat) ? item.reminderRepeat : 'none',
       reminderTimeZone: typeof item?.reminderTimeZone === 'string' ? item.reminderTimeZone.slice(0, 120) : null,
       reminderDays: Array.isArray(item?.reminderDays) ? [...new Set(item.reminderDays.filter(day => Number.isInteger(day) && day >= 0 && day <= 6))].sort() : null,
+      reminderCheckedAt: typeof item?.reminderCheckedAt === 'string' && Number.isFinite(Date.parse(item.reminderCheckedAt)) ? new Date(item.reminderCheckedAt).toISOString() : null,
+      reminderResetAt: typeof item?.reminderResetAt === 'string' && Number.isFinite(Date.parse(item.reminderResetAt)) ? new Date(item.reminderResetAt).toISOString() : null,
       originalTabName: sanitizeSingleLineText(item?.originalTabName, MAX_TAB_NAME_LENGTH) || null
     }));
   });
@@ -1194,7 +1196,7 @@ function renderItemContextMenu() {
     addAction("Mark done", () => markItemDone(menuState.tabIndex, menuState.itemIndex));
     addAction("Remind", () => editItemReminder(tab.id, item.id).catch(() => {
       flashPullSyncIndicator("Reminder options could not open. Reopen Checky while online to update the app.", true, 8000);
-    }), false, !!item.done);
+    }), false, window.checkyReminderState.isChecked(item));
   }
   addAction("Delete", () => armItemDeleteConfirm(menuState.tabIndex, menuState.itemIndex), true);
   positionItemContextMenu();
@@ -1269,12 +1271,19 @@ function moveItemByOffset(tabIndex, itemIndex, offset) {
 
 function markItemDone(tabIndex, itemIndex) {
   const doneTabIndex = getDoneTabIndex();
-  if (doneTabIndex === -1) return;
+  if (doneTabIndex === -1) {
+    const item = state.data.tabs[tabIndex]?.items[itemIndex];
+    if (!item) return;
+    item.done = true; item.reminderCheckedAt = null; item.reminderResetAt = null;
+    render(); persistChecklistImmediately(); return;
+  }
   const sourceTab = state.data.tabs[tabIndex];
   const doneTab = state.data.tabs[doneTabIndex];
   const [item] = sourceTab.items.splice(itemIndex, 1);
   if (!item) return;
   item.done = true;
+  item.reminderCheckedAt = null;
+  item.reminderResetAt = null;
   item.completedAt = new Date().toISOString();
   item.originalTabName = sourceTab.name;
   item.text = item.text.trim() ? `${item.text}\nCompleted: ${formatDoneTimestamp()}` : `Completed: ${formatDoneTimestamp()}`;
@@ -1292,6 +1301,8 @@ function undoDoneItem(itemIndex) {
   const targetIndex = state.data.tabs.findIndex((tab) => !isDoneTab(tab) && tab.name === item.originalTabName);
   const safeTargetIndex = targetIndex === -1 ? getSafeChecklistTabIndex() : targetIndex;
   item.done = false;
+  item.reminderCheckedAt = null;
+  item.reminderResetAt = null;
   item.completedAt = null;
   item.originalTabName = null;
   item.text = stripDoneStamp(item.text);
@@ -1721,14 +1732,14 @@ function renderItems() {
 
     const check = document.createElement("input");
     check.type = "checkbox";
-    check.checked = !!item.done;
+    check.checked = window.checkyReminderState.isChecked(item);
     check.onchange = () => {
       if (suppressCheckboxClick) {
         suppressCheckboxClick = false;
-        check.checked = !!item.done;
+        check.checked = window.checkyReminderState.isChecked(item);
         return;
       }
-      item.done = check.checked;
+      window.checkyReminderState.setChecked(item, check.checked);
       persistChecklistImmediately();
     };
     check.onpointerdown = (event) => {
@@ -1889,11 +1900,14 @@ function renderItems() {
 async function editItemReminder(tabId, itemId) {
   const checklistId = state.currentChecklistId;
   const item = state.data.tabs.find(tab => tab.id === tabId)?.items.find(item => item.id === itemId);
-  if (!item || item.done) return;
+  if (!item || window.checkyReminderState.isChecked(item)) return;
   const value = await window.checkyReminders.edit(item);
   if (value === undefined) return;
   const current = state.data.tabs.find(tab => tab.id === tabId)?.items.find(item => item.id === itemId);
-  if (checklistId !== state.currentChecklistId || !current || current.done) return;
+  if (checklistId !== state.currentChecklistId || !current || window.checkyReminderState.isChecked(current)) return;
+  current.done = false;
+  current.reminderCheckedAt = null;
+  current.reminderResetAt = null;
   current.reminderAt = value?.at || null;
   current.reminderRepeat = value?.repeat || 'none';
   current.reminderTimeZone = value?.timeZone || null;
@@ -2396,3 +2410,20 @@ init();
 
 
 
+
+function refreshRepeatingCheckboxes() {
+  if (document.visibilityState === 'hidden' || state.ui.settingsViewOpen || state.ui.doneViewOpen) return;
+  const tab = state.data.tabs[state.data.active];
+  for (const row of els.list.querySelectorAll('.item')) {
+    const item = tab?.items[Number(row.dataset.itemIndex)];
+    const checkbox = row.querySelector('input[type="checkbox"]');
+    if (item && checkbox) checkbox.checked = window.checkyReminderState.isChecked(item);
+  }
+}
+window.addEventListener('checky-reminder-reset', event => {
+  if (event.detail.recordRef !== state.currentChecklistId) return;
+  window.checkyReminderState.mergeResetTimes(state.data, event.detail.checklist);
+  refreshRepeatingCheckboxes();
+});
+setInterval(refreshRepeatingCheckboxes, 1000);
+document.addEventListener('visibilitychange', refreshRepeatingCheckboxes);

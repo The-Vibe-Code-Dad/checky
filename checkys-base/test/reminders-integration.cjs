@@ -47,7 +47,11 @@ routerAdd('POST', '/api/checky-test/reminders/calendar', (e) => {
   const results = e.requestInfo().body.cases.map(test => require(__hooks + '/lib/reminders.js').dueItems(
     {tabs:[{name:'Events',items:[test.item]}]}, Date.parse(test.now), Date.parse(test.enabledAt || '2000-01-01T00:00:00Z')).map(item => item.at))
   return e.json(200, {results})
-}, $apis.requireSuperuserAuth())`);
+}, $apis.requireSuperuserAuth())
+routerAdd('POST', '/api/checky-test/reminders/next', (e) => e.json(200, {results:e.requestInfo().body.cases.map(test => {
+  const at = require(__hooks + '/lib/reminder-schedule.js').nextOccurrence(test.item, Date.parse(test.after))
+  return Number.isFinite(at) ? new Date(at).toISOString() : null
+})}), $apis.requireSuperuserAuth())`);
     child = spawn(binary, ['serve', '--automigrate=false', '--http=127.0.0.1:' + port, '--dir=' + path.join(dir, 'data'), '--hooksDir=' + path.join(dir, 'hooks'), '--migrationsDir=' + path.join(__dirname, '../pocketbase/pb_migrations')], {
       env: { ...process.env, CHECKY_PUSH_TOKEN: 'test-only-token', CHECKY_PUSH_PORT: String(transport.address().port), CHECKY_PUBLIC_ORIGIN: '', CHECKY_CONFIG_FILE: '' }, stdio: ['ignore', 'pipe', 'pipe']
     });
@@ -103,6 +107,30 @@ routerAdd('POST', '/api/checky-test/reminders/calendar', (e) => {
     assert.equal(calendar.status, 200, JSON.stringify(calendar.data));
     calendarCases.forEach((test, i) => assert.deepEqual(calendar.data.results[i], test.expected, JSON.stringify(test)));
     console.log('PASS calendar repeats, DST gaps/folds, month ends, leap years, no backlog and cancelled/invalid schedules');
+    const nextCases = [
+      ['daily', '2030-03-09T14:00:00Z', '2030-03-09T15:00:00Z', '2030-03-10T13:00:00Z'],
+      ['daily', '2030-03-09T07:30:00Z', '2030-03-09T08:00:00Z', '2030-03-11T06:30:00Z'],
+      ['weekly', '2030-03-03T07:30:00Z', '2030-03-03T08:00:00Z', '2030-03-17T06:30:00Z'],
+      ['weekly', '2030-03-09T14:00:00Z', '2030-03-11T13:30:00Z', '2030-03-13T13:00:00Z', {reminderDays:[1,3,5]}],
+      ['weekly', '2030-03-09T14:00:00Z', '2030-03-08T13:30:00Z', '2030-03-11T13:00:00Z', {reminderDays:[1]}],
+      ['monthly', '2030-01-31T14:00:00Z', '2030-01-31T15:00:00Z', '2030-02-28T14:00:00Z'],
+      ['monthly', '2030-01-31T14:00:00Z', '2030-02-28T15:00:00Z', '2030-03-31T13:00:00Z'],
+      ['yearly', '2028-02-29T14:00:00Z', '2028-03-01T15:00:00Z', '2029-02-28T14:00:00Z'],
+      ['daily', '2026-10-31T05:30:00Z', '2026-11-01T05:45:00Z', '2026-11-02T06:30:00Z'],
+      ['daily', '2026-11-01T06:30:00Z', '2026-11-01T06:00:00Z', '2026-11-01T06:30:00Z'],
+      ['weekly', '2030-03-09T14:00:00Z', '2030-03-11T13:30:00Z', null, {reminderDays:[]}]
+    ].map(([repeat, first, after, expected, extra]) => ({ item: calendarCase(repeat, first, after, null, extra).item, after, expected:expected ? new Date(expected).toISOString() : null }));
+    const next = await req('/api/checky-test/reminders/next', 'POST', {cases:nextCases}, ah);
+    assert.equal(next.status, 200, JSON.stringify(next.data));
+    nextCases.forEach((test,i) => assert.equal(next.data.results[i], test.expected, JSON.stringify(test)));
+    const checkedCases = [
+      calendarCase('daily', '2030-03-09T14:00:00Z', '2030-03-09T15:05:00Z', null, {done:true, reminderCheckedAt:'2030-03-09T15:00:00Z'}),
+      calendarCase('daily', '2030-03-09T14:00:00Z', '2030-03-10T13:05:00Z', '2030-03-10T13:00:00Z', {done:true, reminderCheckedAt:'2030-03-09T15:00:00Z'}),
+      calendarCase('daily', '2030-03-09T14:00:00Z', '2030-03-10T13:05:00Z', null, {done:true, reminderCheckedAt:null})
+    ];
+    const checked = await req('/api/checky-test/reminders/calendar', 'POST', {cases:checkedCases}, ah);
+    checkedCases.forEach((test,i) => assert.deepEqual(checked.data.results[i], test.expected));
+    console.log('PASS next occurrence after checking, selected weekdays, DST gaps/folds, month/year boundaries and permanent completion');
     const create = async name => {
       const result = await req('/api/collections/users/records', 'POST', { email: name + '@reminders.invalid', password, passwordConfirm: password }, ah);
       assert.equal(result.status, 200); return { ...result.data, email: name + '@reminders.invalid' };
@@ -129,7 +157,10 @@ routerAdd('POST', '/api/checky-test/reminders/calendar', (e) => {
     const data = items => ({ tabs: [{ name: 'Events', items: items.map(item => ({ text: item.id, reminderAt: dueAt, ...item })) }] });
     const update = (user, items, version = 2) => req('/api/collections/checklists/records/' + user.defaultChecklist, 'PATCH', { data: data(items), version }, ah);
     const recurringAnchor = new Date(Date.parse(dueAt) - 86400000 * 5).toISOString();
-    assert.equal((await update(alice, [{ id: 'due', reminderAt: recurringAnchor, reminderRepeat: 'weekly', reminderTimeZone: 'UTC', reminderDays: [0, 1, 2, 3, 4, 5, 6] }, { id: 'done', done: true }, { id: 'future', reminderAt: new Date(Date.now() + 60000).toISOString() }])).status, 200);
+    const checkedAt = new Date(Date.parse(dueAt) - 86400000 + 10000).toISOString();
+    const savedRepeat = await update(alice, [{ id: 'due', done:true, reminderCheckedAt:checkedAt, reminderResetAt:'2099-01-01T00:00:00Z', reminderAt: recurringAnchor, reminderRepeat: 'weekly', reminderTimeZone: 'UTC', reminderDays: [0, 1, 2, 3, 4, 5, 6] }, { id: 'done', done: true }, { id: 'future', reminderAt: new Date(Date.now() + 60000).toISOString() }]);
+    assert.equal(savedRepeat.status, 200, JSON.stringify(savedRepeat.data));
+    assert.equal(savedRepeat.data.data.tabs[0].items[0].reminderResetAt, dueAt, 'Server computes the reset time');
     await update(bob, [{ id: 'private-bob' }]);
     const run = async () => { const result = await req('/api/checky-test/reminders/run', 'POST', {}, ah); assert.equal(result.status, 200, JSON.stringify(result.data)); };
     config.remindersEnabled = false;
@@ -140,12 +171,16 @@ routerAdd('POST', '/api/checky-test/reminders/calendar', (e) => {
     await run(); assert.equal(sent.length, 1); assert.equal(sent[0].payload.body, 'due');
     await run(); assert.equal(sent.length, 1);
     console.log('PASS authenticated subscriptions, CSRF/SSRF rejection, private isolation, due delivery and duplicate prevention');
-    const legacy = data([{ id: 'due' }]); delete legacy.tabs[0].items[0].reminderAt;
+    const afterDelivery = await req('/api/collections/checklists/records/' + alice.defaultChecklist, 'GET', undefined, ah);
+    assert.equal(afterDelivery.data.version, 2, 'Repeats must not create background sync conflicts');
+    const legacy = data([{ id: 'due', done:true }]); delete legacy.tabs[0].items[0].reminderAt;
     const legacySave = await req('/api/collections/checklists/records/' + alice.defaultChecklist, 'PATCH', { data: legacy, version: 3 }, ah);
     assert.equal(legacySave.data.data.tabs[0].items[0].reminderAt, recurringAnchor);
     assert.equal(legacySave.data.data.tabs[0].items[0].reminderRepeat, 'weekly');
     assert.equal(legacySave.data.data.tabs[0].items[0].reminderTimeZone, 'UTC');
     assert.deepEqual(legacySave.data.data.tabs[0].items[0].reminderDays, [0, 1, 2, 3, 4, 5, 6]);
+    assert.equal(legacySave.data.data.tabs[0].items[0].reminderCheckedAt, checkedAt);
+    assert.equal(legacySave.data.data.tabs[0].items[0].reminderResetAt, dueAt);
     const cleared = data([{ id: 'due', reminderAt: null }]);
     const clearSave = await req('/api/collections/checklists/records/' + alice.defaultChecklist, 'PATCH', { data: cleared, version: 4 }, ah);
     assert.equal(clearSave.data.data.tabs[0].items[0].reminderAt, null);

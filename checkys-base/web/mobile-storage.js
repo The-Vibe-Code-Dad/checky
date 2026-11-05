@@ -130,6 +130,8 @@
           reminderRepeat: ['daily', 'weekly', 'monthly', 'yearly'].includes(item?.reminderRepeat) ? item.reminderRepeat : 'none',
           reminderTimeZone: typeof item?.reminderTimeZone === 'string' ? item.reminderTimeZone.slice(0, 120) : null,
           reminderDays: Array.isArray(item?.reminderDays) ? [...new Set(item.reminderDays.filter(day => Number.isInteger(day) && day >= 0 && day <= 6))].sort() : null,
+          reminderCheckedAt: typeof item?.reminderCheckedAt === 'string' && Number.isFinite(Date.parse(item.reminderCheckedAt)) ? new Date(item.reminderCheckedAt).toISOString() : null,
+          reminderResetAt: typeof item?.reminderResetAt === 'string' && Number.isFinite(Date.parse(item.reminderResetAt)) ? new Date(item.reminderResetAt).toISOString() : null,
           originalTabName: sanitizeSingleLineText(item?.originalTabName, MAX_TAB_NAME_LENGTH) || null
         }));
 
@@ -285,7 +287,8 @@
   }
 
   function getChecklistSignature(checklist) {
-    return JSON.stringify(cloneValue(normalizeChecklistData(checklist && typeof checklist === "object" ? checklist : DEFAULT_CHECKLIST)));
+    return JSON.stringify(cloneValue(normalizeChecklistData(checklist && typeof checklist === "object" ? checklist : DEFAULT_CHECKLIST)),
+      (key, value) => key === 'reminderResetAt' ? undefined : value);
   }
 
   function markLocalChecklistDirty() {
@@ -1725,6 +1728,13 @@
         version: nextVersion,
         userId
       });
+    }
+    if (updated && typeof updated === 'object') {
+      const acknowledged = extractChecklistData(updated);
+      window.checkyReminderState.mergeResetTimes(normalizedChecklist, acknowledged);
+      const current = getCachedChecklist();
+      if (readSyncMeta().recordId === recordRef && window.checkyReminderState.mergeResetTimes(current, acknowledged)) writeJson(CHECKLIST_KEY, current);
+      if (typeof window.dispatchEvent === 'function') window.dispatchEvent(new CustomEvent('checky-reminder-reset', { detail: { recordRef, checklist: acknowledged } }));
     }
     clearDirtyIfChecklistStillCurrent(normalizedChecklist);
     writeSyncMeta({ baseChecklist: normalizedChecklist });

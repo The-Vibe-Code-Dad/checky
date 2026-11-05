@@ -134,7 +134,7 @@
         }
         repeatHint.textContent = repeat.value === 'none' ? 'Send one reminder.' :
           (repeat.value === 'weekly' ? 'Every ' + (chosenDays().map(day => weekdays[day]).join(', ') || 'selected day') + ', starting on or after the date above. ' : '') +
-          'Repeats in ' + repeatZone() + ' until you complete the item or remove its reminder.' +
+          'Repeats in ' + repeatZone() + '. Checking the item completes this occurrence; it resets at the next scheduled time. Mark done stops the series.' +
           (['monthly', 'yearly'].includes(repeat.value) ? ' Shorter months use their last day.' : '');
       }
       repeat.onchange = updateRepeatHint; input.oninput = updateRepeatHint; updateRepeatHint();

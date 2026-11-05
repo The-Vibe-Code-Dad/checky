@@ -287,6 +287,13 @@ base:
 - Kept versioned cache assets immutable, activated only complete downloads, retained the previous offline shell after failed downloads, and limited cleanup to Checky's own shell caches. API data and desktop downloads bypass the shell cache.
 - Added build/cache unit coverage, real browser tests across three deployments and container checks for generated versions; included these checks in image publishing and documented the one-time transition from older installed builds.
 
+## v0058 - 2026-11-05
+- Made checking a repeating item complete one occurrence, automatically clearing the visible check and resuming reminders at the next scheduled time; retained permanent completion for one-time items and explicit Mark done.
+- Calculated reset timestamps on the server using the saved calendar/timezone, including selected weekdays, DST changes and month/year boundaries. Resets do not write checklist data or bump sync versions in the background.
+- Preserved completion metadata across storage, import/export, older clients and sync; applied server reset times without overwriting newer edits, and excluded derived reset times from dirty-state comparisons.
+- Made Mark done work with the Done archive disabled and added explanatory reminder text and migration guidance for previously checked items.
+- Verified actual browser checks and live resets, permanent completion, server scheduling/delivery/deduplication, calendar boundaries, sync/security and installed-app updates.
+
 desktop:
 
 ## v0001 - 2026-04-07
@@ -412,6 +419,10 @@ desktop:
 
 ## v0035 - 2026-11-04
 - Preserved selected reminder weekdays in desktop normalization, storage and Base sync; verified round trips without changing the desktop public release version.
+
+## v0036 - 2026-11-05
+- Kept repeating-item completion timestamps through desktop storage/sync and added source support for checking one occurrence, displaying its scheduled reset, and permanent Mark done with or without the archive. The public desktop installer version is unchanged.
+- Applied server reset metadata to the open window without overwriting newer edits; ignored derived reset times when checking for unsynced changes.
 
 pocketbase:
 
@@ -541,3 +552,6 @@ pocketbase:
 
 ## v0035 - 2026-11-04
 - Mirrored selected-weekday recurrence, saved-timezone/DST behavior, legacy weekly fallback and preservation of weekdays omitted by older clients; documented the weekday field.
+
+## v0036 - 2026-11-05
+- Mirrored per-occurrence checkbox completion, authoritative next-occurrence timestamps, backward-compatible completion preservation and recurring delivery after a checked occurrence, without background checklist version changes.

@@ -5,6 +5,9 @@ contextBridge.exposeInMainWorld("checkyApi", {
     if (typeof callback === 'function') ipcRenderer.on('auth:code-requested', (_event, request) => callback(request));
   },
   submitVerificationCode: (id, code) => ipcRenderer.invoke('auth:submit-code', id, code),
+  onReminderResetTimes: callback => {
+    if (typeof callback === 'function') ipcRenderer.on('reminder:reset-times', (_event, data) => callback(data));
+  },
   loadState: () => ipcRenderer.invoke("state:load"),
   saveChecklist: (checklist) => ipcRenderer.invoke("checklist:save", checklist),
   saveSettings: (settings) => ipcRenderer.invoke("settings:save", settings),

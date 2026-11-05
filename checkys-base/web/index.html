@@ -91,7 +91,7 @@
           <label>Event reminders</label>
           <div class="inline"><button id="notificationsToggle" type="button" class="btn btn-primary">Enable notifications</button></div>
           <div id="notificationsStatus" class="hint" role="status" aria-live="polite"></div>
-          <div class="hint">Hold down an item (or right-click it), then choose Remind to set its date, time and repeat options, including specific weekdays. Completed or deleted items stop reminders once synced. Delivery may be delayed by your browser or device settings.</div>
+          <div class="hint">Hold down an item (or right-click it), then choose Remind to set its date, time and repeat options, including specific weekdays. Checking a repeating item completes this occurrence and resets at its next scheduled time. Mark done, deleting the item or removing its reminder stops the series once synced. Delivery may be delayed by your browser or device settings.</div>
         </div>
         <div class="setting-row">
           <label>Sync</label>
@@ -211,6 +211,7 @@
   <script src="./auth-client.js?v=__CHECKY_BUILD__"></script>
   <script src="./auth-code-dialog.js?v=__CHECKY_BUILD__"></script>
   <script src="./checkys-base.js?v=__CHECKY_BUILD__"></script>
+  <script src="./reminder-state.js?v=__CHECKY_BUILD__"></script>
   <script src="./mobile-storage.js?v=__CHECKY_BUILD__"></script>
   <script src="./reminders.js?v=__CHECKY_BUILD__"></script>
   <script src="./renderer.js?v=__CHECKY_BUILD__"></script>

@@ -359,7 +359,8 @@ function save(e) {
         if (typeof item?.id === 'string' && typeof item.reminderAt === 'string' && Number.isFinite(Date.parse(item.reminderAt))) {
           reminders['item:' + item.id] = { reminderAt: item.reminderAt,
             reminderRepeat: item.reminderRepeat || 'none', reminderTimeZone: item.reminderTimeZone || null,
-            reminderDays: item.reminderDays == null ? null : item.reminderDays };
+            reminderDays: item.reminderDays == null ? null : item.reminderDays,
+            done: !!item.done, reminderCheckedAt: item.reminderCheckedAt || null };
         }
       }
       let changed = false;
@@ -372,12 +373,34 @@ function save(e) {
               changed = true;
             }
           }
+          if (!Object.prototype.hasOwnProperty.call(item, 'reminderCheckedAt')) {
+            item.reminderCheckedAt = !item.done ? null : !old.done && tab.system !== 'done' && !item.completedAt &&
+              require(__hooks + '/lib/reminder-state.js').repeating(item) ? new Date().toISOString() : old.reminderCheckedAt;
+            changed = true;
+          }
         }
       }
       if (changed) e.record.set('data', after);
     }
     // Access revocation must remain possible even for legacy over-quota data.
     if (previous.getString('data') === e.record.getString('data') && previous.getString('owner') === e.record.getString('owner')) return e.next();
+  }
+  const completionData = normalizeChecklistPayload(e.record.get('data'));
+  if (isChecklistPayload(completionData)) {
+    let changed = false;
+    for (const tab of completionData.tabs) for (const item of tab.items) {
+      if (!item || typeof item !== 'object') continue;
+      if (!Object.prototype.hasOwnProperty.call(item, 'reminderCheckedAt') && !Object.prototype.hasOwnProperty.call(item, 'reminderResetAt')) continue;
+      const checked = Date.parse(item.reminderCheckedAt);
+      const active = tab.system !== 'done' && item.done && Number.isFinite(checked) && require(__hooks + '/lib/reminder-state.js').repeating(item);
+      const reset = active ? require(__hooks + '/lib/reminder-schedule.js').nextOccurrence(item, checked) : NaN;
+      const checkedAt = active ? new Date(checked).toISOString() : null;
+      const resetAt = Number.isFinite(reset) ? new Date(reset).toISOString() : null;
+      if (item.reminderCheckedAt !== checkedAt || item.reminderResetAt !== resetAt) {
+        item.reminderCheckedAt = checkedAt; item.reminderResetAt = resetAt; changed = true;
+      }
+    }
+    if (changed) e.record.set('data', completionData);
   }
   // Initial schema migrations create these collections in stages, before the API starts.
   try {
