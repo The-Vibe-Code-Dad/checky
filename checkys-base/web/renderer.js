@@ -1446,6 +1446,7 @@ function renderInstalledAddons() {
   const opened = new Map([...els.installedAddonLinks.querySelectorAll('details')].map(group => [group.dataset.addonId, group.open]));
   els.installedAddonLinks.replaceChildren();
   for (const addon of installedAddons) {
+    if (!addon.items.length) continue;
     const group = document.createElement('details'); group.className = 'checklist-folder'; group.dataset.addonId = addon.id;
     group.open = opened.get(addon.id) ?? true;
     const heading = document.createElement('summary');
@@ -1464,9 +1465,6 @@ function renderInstalledAddons() {
       contents.append(button);
     };
     for (const item of addon.items) addButton(item.name, item);
-    if (!addon.items.length) {
-      const hint = document.createElement('div'); hint.className = 'hint'; hint.textContent = 'No lists assigned. Ask your PocketBase admin to add you.'; contents.append(hint);
-    }
     group.append(contents); els.installedAddonLinks.append(group);
   }
 }
