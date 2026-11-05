@@ -18,7 +18,7 @@
     return result;
   }
   async function registration() {
-    await navigator.serviceWorker.register('./service-worker.js');
+    await navigator.serviceWorker.register('./service-worker.js', { updateViaCache: 'none' });
     return await Promise.race([
       navigator.serviceWorker.ready,
       new Promise((_, reject) => setTimeout(() => reject(new Error('Notifications are still starting. Please try again.')), 10000))

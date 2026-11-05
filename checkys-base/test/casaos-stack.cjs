@@ -50,6 +50,14 @@ const compose = args => docker(['compose', '-p', project, '-f', file, ...args]);
     const request = (route, options={}) => fetch(url + route, {signal:AbortSignal.timeout(10000), ...options});
     const post = (route, body) => request(route, {method:'POST', headers:{'Content-Type':'application/json', Origin:url}, body:JSON.stringify(body)});
     assert.equal((await request('/')).status, 200);
+    const buildResponse = await request('/version.json');
+    assert.match(buildResponse.headers.get('cache-control'), /no-cache/);
+    const build = (await buildResponse.json()).version;
+    assert.match(build, /^[a-f0-9]{24}$/);
+    for (const asset of ['/', '/service-worker.js', '/pwa.js']) {
+      const source = await (await request(asset)).text();
+      assert.ok(source.includes(build) && !source.includes('__CHECKY_BUILD__'), 'The image must serve one complete stamped web build');
+    }
     assert.equal((await request('/api/health')).status, 200);
     const updateResponse = await request('/desktop-updates/latest.json');
     if (process.env.CHECKY_TEST_WITH_APP === 'true') {

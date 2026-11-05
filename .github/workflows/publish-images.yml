@@ -32,6 +32,7 @@ jobs:
           docker compose -f checkys-base/docker-compose.casaos.yml config --quiet
           node --test checkys-app/test/security.test.cjs
           node --test checkys-base/test/desktop-release.test.cjs
+          node --test checkys-base/test/pwa.test.cjs
           npm ci --prefix checkys-base/pocketbase/push --ignore-scripts --no-audit --no-fund
           node --test checkys-base/test/reminders.test.cjs
       - name: Test fresh backend and real Base/desktop sync
@@ -44,7 +45,13 @@ jobs:
           docker rm checky-reminder-binary
           chmod +x "$RUNNER_TEMP/checky-pocketbase"
           CHECKY_POCKETBASE_BINARY="$RUNNER_TEMP/checky-pocketbase" node checkys-base/test/reminders-integration.cjs
-      - name: Validate web image
+      - name: Test installed-app updates in Chromium
+        # Exercise real service-worker replacement before publishing either image variant.
+        run: |
+          npm install --prefix "$RUNNER_TEMP/checky-browser" --no-save --ignore-scripts --no-audit --no-fund playwright@1.64.1
+          node "$RUNNER_TEMP/checky-browser/node_modules/playwright/cli.js" install --with-deps chromium
+          CHECKY_PLAYWRIGHT_MODULE="$RUNNER_TEMP/checky-browser/node_modules/playwright" CHECKY_POCKETBASE_BINARY="$RUNNER_TEMP/checky-pocketbase" node checkys-base/test/pwa-browser.cjs
+      - name: Validate web image and generated app version
         run: |
           docker build -t checky-web-regression -f checkys-base/web.Dockerfile checkys-base
           docker run --rm checky-web-regression caddy validate --config /etc/caddy/Caddyfile

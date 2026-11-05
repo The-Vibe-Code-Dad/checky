@@ -1904,6 +1904,22 @@ async function editItemReminder(tabId, itemId) {
   if (saved) await runManualSync('reminder');
 }
 
+async function prepareForAppUpdate() {
+  if (state.ui.syncInProgress || state.ui.loginBusy || state.ui.availableChecklistsLoading) {
+    throw new Error('Wait for the current sync or sign-in to finish, then choose Update now.');
+  }
+  if (document.querySelector('dialog[open]') || state.ui.editingTabIndex !== null) {
+    throw new Error('Finish the open reminder or tab edit, then choose Update now.');
+  }
+  if (!hasHostedLoginCredentials()) return;
+  syncVisibleItemsToState();
+  clearPendingSave();
+  if (!await persistChecklistSnapshot(createChecklistSnapshot(), ++lastChecklistSaveRequestId, { updateStatus: false }) ||
+      !await persistVisibleAdvancedSettings()) {
+    throw new Error('Could not save your changes. Try Update now again.');
+  }
+}
+
 function render() {
   state.data = normalizeData(state.data);
   state.settings = normalizeSettings(state.settings);
@@ -2345,6 +2361,7 @@ async function init() {
     ? !hasHostedLoginCredentials()
     : false;
   render();
+  window.checkyPrepareForUpdate = prepareForAppUpdate;
   void window.checkyReminders?.init(state.hostedSession.user.id);
   if (navigator.onLine && hasHostedLoginCredentials()) {
     setTimeout(async () => {

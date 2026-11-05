@@ -3,6 +3,8 @@
 !web/**
 !Caddyfile
 !web.Dockerfile
+!scripts/
+!scripts/build-web.cjs
 web/desktop-updates/
 **/.env
 **/.env.*
