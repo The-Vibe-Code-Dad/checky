@@ -27,6 +27,8 @@ textarea{resize:vertical;white-space:pre-wrap}
 #status{font-size:14px;color:var(--muted);min-height:21px}
 #status.error,#editorError{color:#ffb2b2}
 #status:empty,#editorError:empty{display:none}
+.archive-month{margin:24px 0 8px;font-size:16px;font-weight:700;color:#d7dfef}
+.archive-day{margin:18px 0 6px;font-size:14px;font-weight:600;color:#9eb2d4}
 .entry{padding:18px;background:var(--panel);border:1px solid var(--border);border-radius:12px;margin:12px 0}
 .entry-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
 .entry-heading time{font-weight:700}
