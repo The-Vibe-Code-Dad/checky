@@ -62,9 +62,12 @@ self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin || url.pathname.startsWith('/api/') ||
-      ['/version.json', '/service-worker.js'].includes(url.pathname)) return;
+      ['/version.json', '/service-worker.js', '/addons.json'].includes(url.pathname)) return;
 
   if (event.request.mode === 'navigate') {
+    // Independently installed add-ons manage their own assets. Never substitute
+    // the main app for a missing/uninstalled add-on or cache its pages here.
+    if (!['/', '/index.html'].includes(url.pathname)) return;
     event.respondWith(fetch(event.request, { cache: 'no-store' }).then(async response => {
       if (!response.ok) throw new Error('App unavailable');
       return response;

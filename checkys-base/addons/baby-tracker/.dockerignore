@@ -1,0 +1,12 @@
+**
+!web/
+!web/**
+!pocketbase/
+!pocketbase/pb_hooks/
+!pocketbase/pb_hooks/**
+!pocketbase/pb_migrations/
+!pocketbase/pb_migrations/**
+!build-web.cjs
+!addons.json
+!web.Dockerfile
+!pocketbase.Dockerfile

@@ -1,0 +1,8 @@
+[
+  {
+    "id": "baby-tracker",
+    "name": "Baby tracker",
+    "href": "/baby/",
+    "probe": "/api/checkys-base/baby/status"
+  }
+]

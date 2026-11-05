@@ -9,7 +9,8 @@ const path = require('node:path');
 const project = 'checky-casaos-test-' + randomUUID().slice(0, 8);
 const base = path.resolve(__dirname, '..');
 const docker = args => execFileSync('docker', args, {encoding:'utf8', timeout:120000});
-const config = JSON.parse(docker(['compose', '-p', project, '-f', path.join(base, 'docker-compose.casaos.yml'), 'config', '--format', 'json']));
+const withBaby = process.env.CHECKY_TEST_BABY === 'true';
+const config = JSON.parse(docker(['compose', '-p', project, '-f', path.join(base, withBaby ? 'docker-compose.casaos-baby.yml' : 'docker-compose.casaos.yml'), 'config', '--format', 'json']));
 assert.deepEqual(Object.keys(config.services).sort(), ['pocketbase', 'web']);
 for (const network of Object.values(config.networks)) {
   assert.ok(!network.external && network.name.startsWith(project + '_'), 'tests require isolated project networks');
@@ -25,7 +26,7 @@ const sharedNetwork = Object.keys(config.services.web.networks).find(name =>
 assert.ok(sharedNetwork, 'CasaOS requires an explicit shared bridge network and pocketbase alias');
 const pb = config.services.pocketbase;
 const web = config.services.web;
-pb.image = 'checky-security-regression:local';
+pb.image = process.env.CHECKY_TEST_POCKETBASE_IMAGE || 'checky-security-regression:local';
 web.image = process.env.CHECKY_TEST_WEB_IMAGE || 'checky-web-regression:latest';
 pb.ports = [];
 pb.volumes = [];
@@ -59,6 +60,11 @@ const compose = args => docker(['compose', '-p', project, '-f', file, ...args]);
       assert.ok(source.includes(build) && !source.includes('__CHECKY_BUILD__'), 'The image must serve one complete stamped web build');
     }
     assert.equal((await request('/api/health')).status, 200);
+    const addonManifest = await (await request('/addons.json')).json();
+    assert.equal(addonManifest.some(item => item.id === 'baby-tracker'), withBaby);
+    const babyPage = await request('/baby/');
+    assert.equal(babyPage.status, withBaby ? 200 : 404);
+    if (withBaby) assert.ok(!(await babyPage.text()).includes('__CHECKY_BUILD__'));
     const updateResponse = await request('/desktop-updates/latest.json');
     if (process.env.CHECKY_TEST_WITH_APP === 'true') {
       assert.equal(updateResponse.status, 200);
@@ -90,7 +96,11 @@ const compose = args => docker(['compose', '-p', project, '-f', file, ...args]);
     assert.equal(session.setupRequired, false);
     assert.equal(session.authenticated, true);
     assert.equal(session.user.isAdmin, true);
-    assert.equal((await post('/api/collections/_superusers/auth-with-password', {identity:email, password})).status, 200);
+    const superAuth = await post('/api/collections/_superusers/auth-with-password', {identity:email, password});
+    assert.equal(superAuth.status, 200);
+    const superToken = (await superAuth.json()).token;
+    assert.equal((await request('/api/collections/checky_baby_entries/records', {headers:{Authorization:superToken}})).status, withBaby ? 200 : 404);
+    assert.equal((await request('/api/checkys-base/baby/status', {headers:{Cookie:cookie}})).status, withBaby ? 200 : 404);
     assert.equal((await post('/api/checkys-base/first-user', {email, password, passwordConfirm:password})).status, 403);
     console.log('PASS CasaOS network discovery, first-user creation, and native/cookie authentication through the web entrypoint');
 

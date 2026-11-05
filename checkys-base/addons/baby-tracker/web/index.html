@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1f1f1f">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
+  <title>Baby tracker · Checky's List</title>
+  <link rel="icon" href="../logo.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <link rel="stylesheet" href="./baby.css?v=__CHECKY_BUILD__">
+</head>
+<body>
+  <main>
+    <header class="app-header">
+      <a class="brand" href="../"><img src="../logo.png" alt="">Checky's List</a>
+      <a href="../">Back to lists</a>
+    </header>
+    <h1>Baby tracker</h1>
+    <p class="intro">Feedings, diapers and the little details.</p>
+
+    <form id="login" hidden>
+      <h2>Sign in to Checky Base</h2>
+      <p>Use your existing Checky account to open your personal or shared log.</p>
+      <label>Email<input id="email" type="email" autocomplete="username" required></label>
+      <label>Password<input id="password" type="password" autocomplete="current-password" required></label>
+      <button type="submit" class="primary">Sign in</button>
+    </form>
+    <p id="status" role="status" aria-live="polite">Opening your log…</p>
+
+    <section id="tracker" hidden>
+      <div class="list-picker">
+        <label>List<select id="listPicker" aria-describedby="sharingHint"></select></label>
+        <button id="refresh" type="button">Refresh</button>
+      </div>
+      <p id="sharingHint" class="hint"></p>
+      <div class="toolbar">
+        <button id="addEntry" type="button" class="primary">+ Add entry</button>
+        <label class="unit-label">Show amounts in<select id="units"><option value="ml">ml</option><option value="oz">oz (US fl oz)</option></select></label>
+      </div>
+      <div id="entries" aria-label="Baby log"></div>
+      <button id="loadMore" type="button" hidden>Load earlier entries</button>
+    </section>
+  </main>
+
+  <dialog id="editor" aria-labelledby="editorTitle">
+    <form id="entryForm">
+      <div class="dialog-heading"><h2 id="editorTitle" tabindex="-1">Add entry</h2><button id="cancel" type="button">Cancel</button></div>
+      <label>Date and time<input id="occurredAt" type="datetime-local" required min="1900-01-01T00:00" max="9999-12-31T23:59"></label>
+      <p class="hint">Shown in this device's local time. You can change it.</p>
+      <fieldset>
+        <legend>Feeding</legend>
+        <label class="entry-unit">Amounts in<select id="entryUnits"><option value="ml">ml</option><option value="oz">oz (US fl oz)</option></select></label>
+        <div class="amounts">
+          <label>Breast milk <span class="amount-unit">(ml)</span><input id="breastMilk" type="number" inputmode="decimal" min="0" step="any" placeholder="—"></label>
+          <label>Formula <span class="amount-unit">(ml)</span><input id="formula" type="number" inputmode="decimal" min="0" step="any" placeholder="—"></label>
+        </div>
+        <label>Feeding notes<textarea id="feedingNotes" rows="2" maxlength="2000" placeholder="Notes about this feeding"></textarea></label>
+      </fieldset>
+      <fieldset>
+        <legend>Diaper</legend>
+        <div class="diaper-row"><label class="check"><input id="pee" type="checkbox">Pee</label><label>Pee notes<textarea id="peeNotes" rows="2" maxlength="2000" placeholder="Optional notes"></textarea></label></div>
+        <div class="diaper-row"><label class="check"><input id="poop" type="checkbox">Poop</label><label>Poop notes<textarea id="poopNotes" rows="2" maxlength="2000" placeholder="Optional notes"></textarea></label></div>
+      </fieldset>
+      <p class="hint">A connection is needed to save and share entries.</p>
+      <p id="editorError" role="alert"></p>
+      <div class="dialog-actions"><button id="deleteEntry" type="button" class="danger" hidden>Delete entry</button><button id="saveEntry" type="submit" class="primary">Save entry</button></div>
+    </form>
+  </dialog>
+  <script src="../auth-client.js?v=__CHECKY_BUILD__"></script>
+  <script src="../auth-code-dialog.js?v=__CHECKY_BUILD__"></script>
+  <script src="./amounts.js?v=__CHECKY_BUILD__"></script>
+  <script src="./baby.js?v=__CHECKY_BUILD__"></script>
+</body>
+</html>

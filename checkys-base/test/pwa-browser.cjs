@@ -7,6 +7,7 @@ const http = require('node:http');
 const { spawn } = require('node:child_process');
 const { once } = require('node:events');
 const { buildWeb } = require('../scripts/build-web.cjs');
+const { checkDoneArchive } = require('./done-archive-browser.cjs');
 const { chromium } = require(process.env.CHECKY_PLAYWRIGHT_MODULE || 'playwright');
 const password = 'Disposable-PWA-Only-20261104!';
 async function main() {
@@ -68,7 +69,7 @@ async function main() {
     await page.locator('#loginPasswordInput').fill(password);
     await page.locator('#loginSubmitBtn').click();
     await page.locator('#loginOverlay').waitFor({ state: 'hidden' });
-    await page.waitForFunction(() => !!state.currentChecklistId && !state.ui.syncInProgress);
+    await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
     await page.waitForFunction(() => !!navigator.serviceWorker.controller);
     await page.evaluate(async () => {
       await caches.open('unrelated-test-cache');
@@ -93,7 +94,7 @@ async function main() {
     await page.locator('#list input[type="checkbox"]').uncheck();
     console.log('PASS repeating checkbox acknowledgement, live automatic reset and permanent Mark done without an archive');
     const other = await context.newPage(); await other.goto(origin);
-    await other.waitForFunction(() => !!state.currentChecklistId && !state.ui.syncInProgress);
+    await other.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
     await other.locator('#list textarea').evaluate(el => { el.value = 'Other window draft'; });
     await page.bringToFront();
     let navigations = 0;
@@ -121,7 +122,7 @@ async function main() {
     await page.evaluate(() => { window.checkyStorage.saveChecklist = window.testSaveChecklist; document.querySelector('#list textarea').value = 'Last edit before updating'; });
     await page.locator('#appUpdateApply').click();
     await page.waitForFunction(version => document.querySelector('script[src*="pwa.js"]')?.src.includes(version), versions[1]);
-    await page.waitForFunction(() => !!state.currentChecklistId && !state.ui.syncInProgress);
+    await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
     assert.equal(await page.locator('#list textarea').inputValue(), 'Last edit before updating');
     assert.equal(await page.locator('#loginOverlay').isVisible(), false);
     assert.equal(await page.locator('#appUpdateBanner').isVisible(), false);
@@ -147,17 +148,19 @@ async function main() {
     console.log('PASS failed shell download leaves the previous complete offline build usable; offline check gives feedback');
     // Return online on the existing build, then recover the failed deployment.
     activeBuild = 1; failAsset = false; await context.setOffline(false); await page.goto(origin);
-    await page.waitForFunction(() => !!state.currentChecklistId && !state.ui.syncInProgress);
+    await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
     activeBuild = 2;
     await page.locator('#navToggle').click(); await page.locator('#settingsToggle').click();
     await page.locator('#appUpdateCheck').click();
     await page.locator('#appUpdateBanner').waitFor({ state: 'visible' });
     await page.locator('#appUpdateApply').click();
     await page.waitForFunction(version => document.querySelector('script[src*="pwa.js"]')?.src.includes(version), versions[2]);
-    await page.waitForFunction(() => !!state.currentChecklistId && !state.ui.syncInProgress);
+    await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
     assert.equal(await page.locator('#appUpdateBanner').isVisible(), false);
     assert.deepEqual(errors, []);
     console.log('PASS manual update check, recovery after failed deployment, and no repeat reload prompt');
+    await checkDoneArchive(page, browser, origin, password);
+    assert.deepEqual(errors, []);
   } catch (error) { console.error(log); throw error; }
   finally {
     await browser?.close();

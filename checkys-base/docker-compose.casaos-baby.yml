@@ -1,0 +1,85 @@
+# Optional Baby tracker installation. Standard CasaOS installer stays add-on free.
+name: checkys-base
+
+services:
+  pocketbase:
+    image: ghcr.io/the-vibe-code-dad/checky-pocketbase:latestbaby
+    networks:
+      checky:
+        aliases:
+          - pocketbase
+    restart: unless-stopped
+    environment:
+      TZ: Etc/UTC
+      CHECKY_TRUST_PROXY: "true"
+      # Optional override; otherwise edit pb_data/checky-config.json on the host.
+      CHECKY_PUBLIC_ORIGIN: ""
+    ports:
+      - target: 8080
+        published: "8090"
+        host_ip: 127.0.0.1
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: /DATA/AppData/checkys-base/pb_data
+        target: /pb/pb_data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    stop_grace_period: 30s
+
+  web:
+    image: ghcr.io/the-vibe-code-dad/checky-web:latestbaby
+    networks:
+      - checky
+    restart: unless-stopped
+    environment:
+      TRUSTED_PROXY_CIDRS: "127.0.0.1/32 ::1/128"
+    depends_on:
+      pocketbase:
+        condition: service_healthy
+    ports:
+      - target: 80
+        published: "17760"
+        protocol: tcp
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ && wget -q -O /dev/null http://127.0.0.1/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+# An explicit network is required for CasaOS imports to retain service discovery.
+# Docker's built-in network named "bridge" cannot resolve the pocketbase alias.
+networks:
+  checky:
+    driver: bridge
+
+x-casaos:
+  id: com.checkys.base
+  main: web
+  index: /
+  port_map: "17760"
+  scheme: http
+  icon: https://raw.githubusercontent.com/The-Vibe-Code-Dad/checky/main/checkys-base/web/icon-192.png
+  title:
+    en_US: Checky's List + Baby tracker
+  tagline:
+    en_US: Checklists with the separately installed Baby tracker
+  description:
+    en_US: Checky Base with the Baby tracker add-on. Uses the same database, accounts and shared lists. Keep the existing data directory when adding this to an installation.
+  category: Productivity
+  author: The-Vibe-Code-Dad
+  developer: The-Vibe-Code-Dad
+  architectures:
+    - amd64
+    - arm64
+  version: latestbaby
+  website: https://github.com/The-Vibe-Code-Dad/checky
+  repo: https://github.com/The-Vibe-Code-Dad/checky
+  tips:
+    before_install:
+      en_US: Open the app on port 17760 to create the first user. Checklist data stays in /DATA/AppData/checkys-base/pb_data. Back up existing data before updating; this path does not automatically import an older Docker volume.

@@ -9,6 +9,7 @@
   --danger-2:#963737;
   --text:#ffffff;
 }
+.addon-link{width:100%;margin-top:8px;text-align:left;font:inherit;min-height:44px;color:var(--text)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{
   height:100%;

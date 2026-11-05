@@ -30,6 +30,8 @@ jobs:
         run: |
           docker compose -f checkys-base/docker-compose.yml config --quiet
           docker compose -f checkys-base/docker-compose.casaos.yml config --quiet
+          docker compose -f checkys-base/docker-compose.casaos-baby.yml config --quiet
+          docker compose -f checkys-base/docker-compose.yml -f checkys-base/docker-compose.baby.yml config --quiet
           node --test checkys-app/test/security.test.cjs
           node --test checkys-base/test/desktop-release.test.cjs
           node --test checkys-base/test/pwa.test.cjs
@@ -51,17 +53,25 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/checky-browser" --no-save --ignore-scripts --no-audit --no-fund playwright@1.64.1
           node "$RUNNER_TEMP/checky-browser/node_modules/playwright/cli.js" install --with-deps chromium
           CHECKY_PLAYWRIGHT_MODULE="$RUNNER_TEMP/checky-browser/node_modules/playwright" CHECKY_POCKETBASE_BINARY="$RUNNER_TEMP/checky-pocketbase" node checkys-base/test/pwa-browser.cjs
+          CHECKY_PLAYWRIGHT_MODULE="$RUNNER_TEMP/checky-browser/node_modules/playwright" CHECKY_POCKETBASE_BINARY="$RUNNER_TEMP/checky-pocketbase" node checkys-base/test/baby-tracker.cjs
       - name: Validate web image and generated app version
         run: |
           docker build -t checky-web-regression -f checkys-base/web.Dockerfile checkys-base
           docker run --rm checky-web-regression caddy validate --config /etc/caddy/Caddyfile
       - name: Test CasaOS first-user setup through the web entrypoint
         run: node checkys-base/test/casaos-stack.cjs
+      - name: Build and test separately installed Baby tracker
+        run: |
+          docker build -t checky-web-baby-regression --build-arg BASE_WEB_IMAGE=checky-web-regression:latest -f checkys-base/addons/baby-tracker/web.Dockerfile checkys-base/addons/baby-tracker
+          docker build -t checky-pocketbase-baby-regression --build-arg BASE_POCKETBASE_IMAGE=checky-security-regression:local -f checkys-base/addons/baby-tracker/pocketbase.Dockerfile checkys-base/addons/baby-tracker
+          CHECKY_TEST_WEB_IMAGE=checky-web-baby-regression:latest CHECKY_TEST_POCKETBASE_IMAGE=checky-pocketbase-baby-regression:latest CHECKY_TEST_BABY=true node checkys-base/test/casaos-stack.cjs
       - name: Build and test Base with the verified Windows app
         run: |
           node checkys-base/scripts/download-desktop-release.cjs
           docker build -t checky-web-with-app-regression --build-arg BASE_WEB_IMAGE=checky-web-regression:latest -f checkys-base/web-with-app.Dockerfile checkys-base/.desktop-release
           CHECKY_TEST_WEB_IMAGE=checky-web-with-app-regression:latest CHECKY_TEST_WITH_APP=true node checkys-base/test/casaos-stack.cjs
+          docker build -t checky-web-app-baby-regression --build-arg BASE_WEB_IMAGE=checky-web-baby-regression:latest -f checkys-base/web-with-app.Dockerfile checkys-base/.desktop-release
+          CHECKY_TEST_WEB_IMAGE=checky-web-app-baby-regression:latest CHECKY_TEST_POCKETBASE_IMAGE=checky-pocketbase-baby-regression:latest CHECKY_TEST_WITH_APP=true CHECKY_TEST_BABY=true node checkys-base/test/casaos-stack.cjs
 
   publish:
     name: Publish AMD64 and ARM64 images
@@ -133,7 +143,40 @@ jobs:
             org.opencontainers.image.title=Checky's List Base with Windows app
           cache-from: type=gha,scope=checky-web-wapp
           cache-to: type=gha,mode=max,scope=checky-web-wapp
-      - name: Promote the completed images to latest and latestwapp
+      - name: Build and push optional Baby tracker web image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./checkys-base/addons/baby-tracker
+          file: ./checkys-base/addons/baby-tracker/web.Dockerfile
+          build-args: BASE_WEB_IMAGE=${{ env.IMAGE_PREFIX }}-web:sha-${{ github.sha }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE_PREFIX }}-web:sha-${{ github.sha }}-baby
+          cache-from: type=gha,scope=checky-web-baby
+          cache-to: type=gha,mode=max,scope=checky-web-baby
+      - name: Build and push optional Baby tracker backend image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./checkys-base/addons/baby-tracker
+          file: ./checkys-base/addons/baby-tracker/pocketbase.Dockerfile
+          build-args: BASE_POCKETBASE_IMAGE=${{ env.IMAGE_PREFIX }}-pocketbase:sha-${{ github.sha }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE_PREFIX }}-pocketbase:sha-${{ github.sha }}-baby
+          cache-from: type=gha,scope=checky-pocketbase-baby
+          cache-to: type=gha,mode=max,scope=checky-pocketbase-baby
+      - name: Build and push Baby tracker with Windows app hosting
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./checkys-base/.desktop-release
+          file: ./checkys-base/web-with-app.Dockerfile
+          build-args: BASE_WEB_IMAGE=${{ env.IMAGE_PREFIX }}-web:sha-${{ github.sha }}-baby
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE_PREFIX }}-web:sha-${{ github.sha }}-wappbaby
+          cache-from: type=gha,scope=checky-web-wappbaby
+          cache-to: type=gha,mode=max,scope=checky-web-wappbaby
+      - name: Promote completed core and optional images
         run: |
           for component in web pocketbase; do
             docker buildx imagetools create \
@@ -145,4 +188,13 @@ jobs:
             --tag "${IMAGE_PREFIX}-web:latestwapp" \
             "${IMAGE_PREFIX}-web:sha-${GITHUB_SHA}-wapp"
           echo "- \`${IMAGE_PREFIX}-web:latestwapp\` includes the verified Windows installer and signed manifest." >> "$GITHUB_STEP_SUMMARY"
+          for component in web pocketbase; do
+            docker buildx imagetools create \
+              --tag "${IMAGE_PREFIX}-${component}:latestbaby" \
+              "${IMAGE_PREFIX}-${component}:sha-${GITHUB_SHA}-baby"
+          done
+          docker buildx imagetools create \
+            --tag "${IMAGE_PREFIX}-web:latestwappbaby" \
+            "${IMAGE_PREFIX}-web:sha-${GITHUB_SHA}-wappbaby"
+          echo 'Baby tracker is separately installed with latestbaby on both services (or latestwappbaby on web for Windows app hosting).' >> "$GITHUB_STEP_SUMMARY"
           echo 'CasaOS installer: [docker-compose.casaos.yml](https://raw.githubusercontent.com/The-Vibe-Code-Dad/checky/main/checkys-base/docker-compose.casaos.yml)' >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,17 @@
+# Optional source-build overlay. Build the two core images first (see addon README).
+# Shares the existing Compose services, ports, and PocketBase data volume.
+services:
+  web:
+    image: checky-web-baby:local
+    build:
+      context: ./addons/baby-tracker
+      dockerfile: web.Dockerfile
+      args:
+        BASE_WEB_IMAGE: checky-web-core:local
+  pocketbase:
+    image: checky-pocketbase-baby:local
+    build:
+      context: ./addons/baby-tracker
+      dockerfile: pocketbase.Dockerfile
+      args:
+        BASE_POCKETBASE_IMAGE: checky-pocketbase-core:local
