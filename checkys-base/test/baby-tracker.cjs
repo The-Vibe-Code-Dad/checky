@@ -276,8 +276,8 @@ async function main() {
     await adminPage.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
     await adminPage.locator('#navToggle').click();
     const adminFolder = adminPage.locator('[data-addon-id="baby-tracker"]');
-    await adminFolder.getByText('No lists assigned.',{exact:false}).waitFor();
-    assert.equal(await adminFolder.getByRole('button').count(),0);
+    await adminPage.evaluate(() => loadInstalledAddons());
+    assert.equal(await adminFolder.count(),0, 'Hide Baby when no baby lists are assigned');
     await req('/api/collections/_superusers/records','POST',{email:'second-admin@baby.invalid',password,passwordConfirm:password},admin.token);
     const secondAdmin = await req('/api/collections/_superusers/auth-with-password','POST',{identity:'second-admin@baby.invalid',password});
     const independent = await req(listRecords,'POST',{name:'PocketBase assigned baby list',members:[adminUser.record.id,users[2].id]},secondAdmin.token);
@@ -296,8 +296,7 @@ async function main() {
     await assigned.locator('#tracker').waitFor({state:'hidden'});
     await assigned.getByText('This baby list is unavailable.',{exact:false}).waitFor();
     await adminPage.locator('#navToggle').click();
-    await adminFolder.getByText('No lists assigned.',{exact:false}).waitFor();
-    assert.equal(await adminFolder.getByRole('button').count(),0);
+    await adminFolder.waitFor({state:'detached'});
     assert.equal((await req(listEndpoint,'GET',undefined,tokens[2])).items[0].name,'Renamed in PocketBase');
     await req(listRecords + '/' + independent.id,'PATCH',{members:[]},admin.token);
     await req(endpoint + '?list=' + independentRef,'GET',undefined,tokens[2],404);

@@ -332,6 +332,9 @@ base:
 - Removed the in-app management screen, membership/user-directory endpoints and Checky app-admin access bypass. Every app account needs explicit membership; Baby stays integrated beside Personal and Shared with the existing day-grouped log.
 - Added a migration that preserves lists/members/entries while removing the retired membership-editor version field. Verified native PocketBase create/rename/assign/revoke with two superusers, denied access for regular and first-user accounts, preserved upgrades and integrated navigation; all tracker integration and eight build/auth unit checks passed.
 
+## v0066 - 2026-11-05
+- Hide the Baby navigation category when the signed-in user has no assigned baby lists, matching Shared. It appears after a PocketBase admin assigns a list and disappears when access to the last baby list is removed.
+
 desktop:
 
 ## v0001 - 2026-04-07
