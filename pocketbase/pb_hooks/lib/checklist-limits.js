@@ -358,14 +358,15 @@ function save(e) {
       for (const tab of before.tabs) for (const item of tab.items) {
         if (typeof item?.id === 'string' && typeof item.reminderAt === 'string' && Number.isFinite(Date.parse(item.reminderAt))) {
           reminders['item:' + item.id] = { reminderAt: item.reminderAt,
-            reminderRepeat: item.reminderRepeat || 'none', reminderTimeZone: item.reminderTimeZone || null };
+            reminderRepeat: item.reminderRepeat || 'none', reminderTimeZone: item.reminderTimeZone || null,
+            reminderDays: item.reminderDays == null ? null : item.reminderDays };
         }
       }
       let changed = false;
       for (const tab of after.tabs) for (const item of tab.items) {
         if (item && typeof item === 'object' && reminders['item:' + item.id]) {
           const old = reminders['item:' + item.id];
-          for (const field of ['reminderAt', 'reminderRepeat', 'reminderTimeZone']) {
+          for (const field of ['reminderAt', 'reminderRepeat', 'reminderTimeZone', 'reminderDays']) {
             if (!Object.prototype.hasOwnProperty.call(item, field)) {
               item[field] = field !== 'reminderAt' && !item.reminderAt ? (field === 'reminderRepeat' ? 'none' : null) : old[field];
               changed = true;

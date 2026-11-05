@@ -47,7 +47,7 @@ async function browser(email) {
 }
 const textOf = checklist=>checklist.tabs[0].items[0]?.text;
 const reminderAt = '2030-01-02T15:04:00.000Z';
-const data = text=>({active:0,tabs:[{id:'stable-tab',name:'Tasks',items:[{id:'stable-task',text,done:false,reminderAt,reminderRepeat:'weekly',reminderTimeZone:'America/New_York'}]}]});
+const data = text=>({active:0,tabs:[{id:'stable-tab',name:'Tasks',items:[{id:'stable-task',text,done:false,reminderAt,reminderRepeat:'weekly',reminderTimeZone:'America/New_York',reminderDays:[1,3,5]}]}]});
 (async()=>{
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'checky-client-test-'));
   try {
@@ -63,12 +63,14 @@ const data = text=>({active:0,tabs:[{id:'stable-tab',name:'Tasks',items:[{id:'st
     assert.equal(state.checklist.tabs[0].items[0].reminderAt, reminderAt);
     assert.equal(state.checklist.tabs[0].items[0].reminderRepeat, 'weekly');
     assert.equal(state.checklist.tabs[0].items[0].reminderTimeZone, 'America/New_York');
+    assert.deepEqual(Array.from(state.checklist.tabs[0].items[0].reminderDays), [1,3,5]);
     await web.saveChecklist(data('personal from Base'));
     state=await web.syncNow(data('personal from Base')); assert.equal(state.ok,true,state.message);
     pulled=await desk.pullChecklistFromRemote(); assert.equal(textOf(pulled.checklist),'personal from Base');
     assert.equal(pulled.checklist.tabs[0].items[0].reminderAt, reminderAt);
     assert.equal(pulled.checklist.tabs[0].items[0].reminderRepeat, 'weekly');
     assert.equal(pulled.checklist.tabs[0].items[0].reminderTimeZone, 'America/New_York');
+    assert.deepEqual(Array.from(pulled.checklist.tabs[0].items[0].reminderDays), [1,3,5]);
     console.log('PASS real Base and desktop personal sync in both directions');
     const shared=await api('/api/collections/shared_checklists/records',{shareKey:'client-'+Date.now(),name:'Client shared',owner:user.id,version:1,data:data('shared seed')},admin.token);
     await api('/api/collections/users/records/'+user.id,{assignedSharedChecklist:shared.id},admin.token,'PATCH');

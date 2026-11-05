@@ -274,6 +274,12 @@ base:
 - Preserved repeat metadata across web storage, sync, older-client saves and explicit removal; included timezone data in the Docker backend and bumped the PWA cache.
 - Verified hold-menu behavior and repeat editing at desktop/phone sizes, 16 real PocketBase calendar cases, delivery/access controls, security/MFA, and Base/desktop sync. Live-device push delivery and Docker image builds remain deployment checks.
 
+## v0056 - 2026-11-04
+- Added a Sunday–Saturday picker to weekly reminders, supporting one or several selected days at the saved local time from the start date onward.
+- Preserved weekday selections through web storage, import/export, desktop sync and older-client updates; retained the original weekday for existing weekly schedules.
+- Versioned PWA scripts/styles and revalidated app entrypoints to prevent stale cached reminder modules from being mixed with new controls. Kept menu buttons in place during viewport resizing and focused the reminder heading so phone keyboards/date pickers do not cover the options on entry; added visible failure feedback.
+- Verified selected-day scheduling and DST boundaries with real PocketBase, browser touch-hold/tap behavior, stale PWA cache recovery, mobile layout, validation and Base/desktop sync. Physical installed-device behavior and provider delivery still require confirmation on the affected phone.
+
 desktop:
 
 ## v0001 - 2026-04-07
@@ -396,6 +402,9 @@ desktop:
 
 ## v0034 - 2026-11-04
 - Preserved reminder repeat frequency and timezone in desktop normalization, local storage and sync; verified round trips with Base without adding desktop notification controls or changing the public release version.
+
+## v0035 - 2026-11-04
+- Preserved selected reminder weekdays in desktop normalization, storage and Base sync; verified round trips without changing the desktop public release version.
 
 pocketbase:
 
@@ -522,3 +531,6 @@ pocketbase:
 ## v0034 - 2026-11-04
 - Mirrored timezone-aware daily/weekly/monthly/yearly reminder scheduling, original-date month-end handling and preservation of repeat fields omitted by older clients.
 - Added Docker timezone data and documented calendar-repeat behavior and cancellation.
+
+## v0035 - 2026-11-04
+- Mirrored selected-weekday recurrence, saved-timezone/DST behavior, legacy weekly fallback and preservation of weekdays omitted by older clients; documented the weekday field.

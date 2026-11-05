@@ -104,11 +104,36 @@
         const option = document.createElement('option'); option.value = value; option.textContent = text; repeat.append(option);
       }
       repeat.value = ['daily', 'weekly', 'monthly', 'yearly'].includes(item.reminderRepeat) ? item.reminderRepeat : 'none';
-      const repeatHint = document.createElement('p'); repeatHint.className = 'hint'; repeatHint.setAttribute('aria-live', 'polite');
+      const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const days = document.createElement('fieldset'); days.className = 'reminder-days';
+      const legend = document.createElement('legend'); legend.textContent = 'Repeat on'; days.append(legend);
       const repeatZone = () => input.value === initialLocal && item.reminderTimeZone ? item.reminderTimeZone : localZone;
+      const anchorDay = () => {
+        // The existing schedule may belong to a different timezone than this phone.
+        const date = input.value === initialLocal && item.reminderAt ? new Date(item.reminderAt) : new Date(input.value);
+        return weekdays.indexOf(new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: repeatZone() }).format(date));
+      };
+      let daysEdited = Array.isArray(item.reminderDays) && item.reminderDays.length > 0;
+      const selectedDays = daysEdited ? item.reminderDays : [anchorDay()];
+      const dayInputs = weekdays.map((name, day) => {
+        const choice = document.createElement('label');
+        const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.value = String(day); checkbox.checked = selectedDays.includes(day);
+        checkbox.setAttribute('aria-label', name);
+        const text = document.createElement('span'); text.textContent = name.slice(0, 3);
+        choice.append(checkbox, text); days.append(choice);
+        checkbox.onchange = () => { daysEdited = true; updateRepeatHint(); };
+        return checkbox;
+      });
+      const chosenDays = () => dayInputs.filter(checkbox => checkbox.checked).map(checkbox => Number(checkbox.value));
+      const repeatHint = document.createElement('p'); repeatHint.className = 'hint'; repeatHint.setAttribute('aria-live', 'polite');
       function updateRepeatHint() {
         label.textContent = repeat.value === 'none' ? 'Date and time' : 'Starts';
+        days.hidden = repeat.value !== 'weekly';
+        if (!daysEdited && Number.isFinite(new Date(input.value).getTime())) {
+          const day = anchorDay(); dayInputs.forEach((checkbox, index) => { checkbox.checked = index === day; });
+        }
         repeatHint.textContent = repeat.value === 'none' ? 'Send one reminder.' :
+          (repeat.value === 'weekly' ? 'Every ' + (chosenDays().map(day => weekdays[day]).join(', ') || 'selected day') + ', starting on or after the date above. ' : '') +
           'Repeats in ' + repeatZone() + ' until you complete the item or remove its reminder.' +
           (['monthly', 'yearly'].includes(repeat.value) ? ' Shorter months use their last day.' : '');
       }
@@ -131,12 +156,16 @@
         const continuing = item.reminderAt && input.value === initialLocal;
         if (!Number.isFinite(date.getTime()) || (date.getTime() <= Date.now() && !continuing)) { error.textContent = 'Choose a future date and time.'; return; }
         if (localDate(date) !== input.value) { error.textContent = 'That time does not exist in your timezone because the clocks change. Choose another time.'; return; }
+        if (repeat.value === 'weekly' && !chosenDays().length) { error.textContent = 'Choose at least one day of the week.'; return; }
         finish({ at: input.value === initialLocal && item.reminderAt ? item.reminderAt : date.toISOString(),
-          repeat: repeat.value, timeZone: repeat.value === 'none' ? null : repeatZone() });
+          repeat: repeat.value, timeZone: repeat.value === 'none' ? null : repeatZone(), days: repeat.value === 'weekly' ? chosenDays() : null });
       };
       actions.append(save, remove, cancel);
-      form.append(title, description, label, input, repeatLabel, repeat, repeatHint, hint, error, actions);
-      dialog.append(form); document.body.append(dialog); dialog.showModal(); input.focus();
+      form.append(title, description, label, input, repeatLabel, repeat, days, repeatHint, hint, error, actions);
+      // Keep the phone's keyboard/date picker from opening over the options on entry.
+      title.tabIndex = -1; title.autofocus = true;
+      dialog.setAttribute('aria-labelledby', 'reminderDialogTitle'); title.id = 'reminderDialogTitle';
+      dialog.append(form); document.body.append(dialog); dialog.showModal(); title.focus();
     });
   }
   window.checkyReminders = { init, edit };

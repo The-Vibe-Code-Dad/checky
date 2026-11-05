@@ -82,7 +82,22 @@ routerAdd('POST', '/api/checky-test/reminders/calendar', (e) => {
       calendarCase('daily', '2030-03-09T14:00:00Z', '2030-03-10T13:05:00Z', null, { reminderAt: null }),
       calendarCase('daily', '2030-03-09T14:00:00Z', '2030-03-10T13:05:00Z', null, { reminderTimeZone: 'Invalid/Zone' }),
       calendarCase('weekly', '2030-03-10T13:00:00Z', '2030-03-12T13:05:00Z', null),
-      calendarCase('daily', '2030-03-11T13:00:00Z', '2030-03-10T13:05:00Z', null)
+      calendarCase('daily', '2030-03-11T13:00:00Z', '2030-03-10T13:05:00Z', null),
+      calendarCase('weekly', '2030-03-09T14:00:00Z', '2030-03-09T14:05:00Z', null, { reminderDays: [1, 3, 5] }),
+      calendarCase('weekly', '2030-03-09T14:00:00Z', '2030-03-11T13:05:00Z', '2030-03-11T13:00:00Z', { reminderDays: [1, 3, 5] }),
+      calendarCase('weekly', '2030-03-09T14:00:00Z', '2030-03-13T13:05:00Z', '2030-03-13T13:00:00Z', { reminderDays: [1, 3, 5] }),
+      calendarCase('weekly', '2030-03-09T14:00:00Z', '2030-03-12T13:05:00Z', null, { reminderDays: [1, 3, 5] }),
+      calendarCase('weekly', '2030-03-09T14:00:00Z', '2030-03-16T13:05:00Z', '2030-03-16T13:00:00Z', { reminderDays: [6] }),
+      calendarCase('weekly', '2030-03-03T14:00:00Z', '2030-03-10T13:05:00Z', '2030-03-10T13:00:00Z', { reminderDays: [0] }),
+      calendarCase('weekly', '2030-03-09T07:30:00Z', '2030-03-10T08:00:00Z', null, { reminderDays: [0] }),
+      calendarCase('weekly', '2030-03-09T07:30:00Z', '2030-03-11T06:35:00Z', '2030-03-11T06:30:00Z', { reminderDays: [0, 1] }),
+      calendarCase('weekly', '2026-10-31T05:30:00Z', '2026-11-01T06:45:00Z', '2026-11-01T05:30:00Z', { reminderDays: [0] }),
+      calendarCase('weekly', '2026-11-01T06:30:00Z', '2026-11-01T06:45:00Z', '2026-11-01T06:30:00Z', { reminderDays: [0] }),
+      calendarCase('weekly', '2030-03-09T19:00:00Z', '2030-03-10T19:05:00Z', '2030-03-10T19:00:00Z', { reminderDays: [1], reminderTimeZone: 'Pacific/Kiritimati' }),
+      calendarCase('weekly', '2030-03-09T14:00:00Z', '2030-03-11T13:05:00Z', null, { reminderDays: [] }),
+      calendarCase('weekly', '2030-03-09T14:00:00Z', '2030-03-11T13:05:00Z', null, { reminderDays: [8] }),
+      calendarCase('weekly', '2030-03-09T14:00:00Z', '2030-03-11T13:05:00Z', null, { reminderDays: ['1'] }),
+      calendarCase('weekly', '2030-03-09T14:00:00Z', '2030-03-11T13:05:00Z', null, { reminderDays: 'Monday' })
     ];
     const calendar = await req('/api/checky-test/reminders/calendar', 'POST', { cases: calendarCases }, ah);
     assert.equal(calendar.status, 200, JSON.stringify(calendar.data));
@@ -114,7 +129,7 @@ routerAdd('POST', '/api/checky-test/reminders/calendar', (e) => {
     const data = items => ({ tabs: [{ name: 'Events', items: items.map(item => ({ text: item.id, reminderAt: dueAt, ...item })) }] });
     const update = (user, items, version = 2) => req('/api/collections/checklists/records/' + user.defaultChecklist, 'PATCH', { data: data(items), version }, ah);
     const recurringAnchor = new Date(Date.parse(dueAt) - 86400000 * 5).toISOString();
-    assert.equal((await update(alice, [{ id: 'due', reminderAt: recurringAnchor, reminderRepeat: 'daily', reminderTimeZone: 'UTC' }, { id: 'done', done: true }, { id: 'future', reminderAt: new Date(Date.now() + 60000).toISOString() }])).status, 200);
+    assert.equal((await update(alice, [{ id: 'due', reminderAt: recurringAnchor, reminderRepeat: 'weekly', reminderTimeZone: 'UTC', reminderDays: [0, 1, 2, 3, 4, 5, 6] }, { id: 'done', done: true }, { id: 'future', reminderAt: new Date(Date.now() + 60000).toISOString() }])).status, 200);
     await update(bob, [{ id: 'private-bob' }]);
     const run = async () => { const result = await req('/api/checky-test/reminders/run', 'POST', {}, ah); assert.equal(result.status, 200, JSON.stringify(result.data)); };
     config.remindersEnabled = false;
@@ -128,11 +143,13 @@ routerAdd('POST', '/api/checky-test/reminders/calendar', (e) => {
     const legacy = data([{ id: 'due' }]); delete legacy.tabs[0].items[0].reminderAt;
     const legacySave = await req('/api/collections/checklists/records/' + alice.defaultChecklist, 'PATCH', { data: legacy, version: 3 }, ah);
     assert.equal(legacySave.data.data.tabs[0].items[0].reminderAt, recurringAnchor);
-    assert.equal(legacySave.data.data.tabs[0].items[0].reminderRepeat, 'daily');
+    assert.equal(legacySave.data.data.tabs[0].items[0].reminderRepeat, 'weekly');
     assert.equal(legacySave.data.data.tabs[0].items[0].reminderTimeZone, 'UTC');
+    assert.deepEqual(legacySave.data.data.tabs[0].items[0].reminderDays, [0, 1, 2, 3, 4, 5, 6]);
     const cleared = data([{ id: 'due', reminderAt: null }]);
     const clearSave = await req('/api/collections/checklists/records/' + alice.defaultChecklist, 'PATCH', { data: cleared, version: 4 }, ah);
     assert.equal(clearSave.data.data.tabs[0].items[0].reminderAt, null);
+    assert.equal(clearSave.data.data.tabs[0].items[0].reminderDays, null);
     console.log('PASS older clients retain omitted reminder dates; explicit null removes them');
     const shared = await req('/api/collections/shared_checklists/records', 'POST', { owner: bob.id, sharedWith: [alice.id], shareKey: 'reminder-shared', name: 'Shared', data: data([{ id: 'shared' }]), version: 1 }, ah);
     assert.equal(shared.status, 200, JSON.stringify(shared.data));
