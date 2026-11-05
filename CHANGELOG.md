@@ -316,6 +316,11 @@ base:
 - Returned to an ordinary checklist when hiding the active archive, preserved the selected checklist when moving the archive to the end, and handled imports containing only an archive. Mark done still completes items in place while archiving is disabled.
 - Added and passed a browser regression in the existing PWA suite covering delayed folder responses, a fresh second device with Done hidden, real PocketBase saves/sync, hide/show toggles and archive-only imports. The complete PWA browser suite and web build/cache checks passed, resolving the Done regression noted in v0061.
 
+## v0063 - 2026-11-05
+- Grouped Baby tracker entries by month and local calendar day, matching the Done archive's date headings. Newest days and entries appear first, with each entry showing its time.
+- Kept the full date in accessible Edit labels and timestamp tooltips. Changing an entry's date moves it to the matching day; loading earlier entries continues existing day groups.
+- Verified local midnight/month/year boundaries, date edits, reloads, pagination and phone layout against real PocketBase in Chromium. Existing tracker integration and web build/cache checks passed.
+
 desktop:
 
 ## v0001 - 2026-04-07

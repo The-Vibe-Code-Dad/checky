@@ -44,14 +44,28 @@
     $('entries').replaceChildren();
     $('loadMore').hidden = !more;
     if (!entries.length) $('entries').append(node('p', 'empty', 'No entries yet. Add a feeding, diaper change or note.'));
+    let lastMonth = '', lastDay = '';
     for (const record of entries) {
       const data = record.entry;
+      const date = new Date(data.occurredAt);
+      const month = date.getFullYear() + '-' + date.getMonth();
+      const day = month + '-' + date.getDate();
+      if (month !== lastMonth) {
+        $('entries').append(node('h2', 'archive-month', date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })));
+        lastMonth = month;
+      }
+      if (day !== lastDay) {
+        $('entries').append(node('h3', 'archive-day', date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })));
+        lastDay = day;
+      }
       const card = node('article', 'entry');
       const heading = node('div', 'entry-heading');
-      const time = node('time', '', new Date(data.occurredAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }));
+      const time = node('time', '', date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }));
       time.dateTime = data.occurredAt;
+      const timestamp = date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+      time.title = timestamp;
       const edit = node('button', '', 'Edit'); edit.type = 'button'; edit.disabled = !activeList()?.writable;
-      edit.setAttribute('aria-label', 'Edit entry from ' + time.textContent);
+      edit.setAttribute('aria-label', 'Edit entry from ' + timestamp);
       edit.onclick = () => openEditor(record);
       heading.append(time, edit); card.append(heading);
       const feeding = node('div', 'feed-summary');
@@ -80,7 +94,7 @@
       const result = await api(apiRoot + '/entries?list=' + encodeURIComponent(current) + cursor);
       entries = append ? [...entries, ...result.items.filter(item => !entries.some(old => old.id === item.id))] : result.items;
       more = result.more; render();
-      if (!quiet) status('Up to date. Newest entries appear first.');
+      if (!quiet) status('Up to date. Grouped by day, newest first.');
     } finally { loading = false; controls(); }
   }
   async function start() {

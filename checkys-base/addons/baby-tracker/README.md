@@ -37,7 +37,7 @@ To update an installed add-on, update both optional images together. Updating to
 
 ## Tracking and sharing
 
-The log at `/baby/` shows newest entries first and refreshes every 30 seconds while no entry form is open. Add entry fills in the current date/time, which can be edited. Entries have breast milk and formula amounts, feeding notes, and separate pee/poop checkboxes with notes. Display amounts in ml or **US fluid ounces**; stored ml values retain their precision when switching units.
+The log at `/baby/` groups entries under month and day headings like the Done tab, with the newest days and times first. Dates use this device's local time; editing an entry's date moves it to the matching day. The log refreshes every 30 seconds while no entry form is open. Add entry fills in the current date/time, which can be edited. Entries have breast milk and formula amounts, feeding notes, and separate pee/poop checkboxes with notes. Display amounts in ml or **US fluid ounces**; stored ml values retain their precision when switching units.
 
 Choose the current personal/shared list in the tracker. Shared caregivers use Base's existing owner/member access. Separate additions do not replace one another; editing/deleting an entry uses its current version to reject conflicting edits. Saving needs a connection, and a failed save retains the open form. The add-on's assets are versioned independently and are not downloaded into the standard Base offline cache.
 
