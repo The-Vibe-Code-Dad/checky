@@ -280,6 +280,13 @@ base:
 - Versioned PWA scripts/styles and revalidated app entrypoints to prevent stale cached reminder modules from being mixed with new controls. Kept menu buttons in place during viewport resizing and focused the reminder heading so phone keyboards/date pickers do not cover the options on entry; added visible failure feedback.
 - Verified selected-day scheduling and DST boundaries with real PocketBase, browser touch-hold/tap behavior, stale PWA cache recovery, mobile layout, validation and Base/desktop sync. Physical installed-device behavior and provider delivery still require confirmation on the affected phone.
 
+## v0057 - 2026-11-04
+- Added installed-web update checks on opening, foregrounding and reconnecting, plus Settings > App updates > Check for app updates and an Update now banner after a complete download.
+- Saved current checklist edits and settings before the requested reload; blocked reload during sync, unfinished reminder/tab edits or failed local saves. Updates retain sign-in, preferences and notification opt-in and leave other open windows alone.
+- Generated Docker web versions from runtime contents automatically, stamped scripts/styles/service-worker metadata and served uncached version checks. The Windows-app image inherits the same generated web build.
+- Kept versioned cache assets immutable, activated only complete downloads, retained the previous offline shell after failed downloads, and limited cleanup to Checky's own shell caches. API data and desktop downloads bypass the shell cache.
+- Added build/cache unit coverage, real browser tests across three deployments and container checks for generated versions; included these checks in image publishing and documented the one-time transition from older installed builds.
+
 desktop:
 
 ## v0001 - 2026-04-07

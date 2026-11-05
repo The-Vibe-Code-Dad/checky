@@ -24,7 +24,7 @@
     }
 
     handle {
-      @appEntry path / /index.html /service-worker.js
+      @appEntry path / /index.html /service-worker.js /version.json
       header @appEntry Cache-Control "no-cache"
 
       @desktopUpdateManifest path /desktop-updates/latest.json

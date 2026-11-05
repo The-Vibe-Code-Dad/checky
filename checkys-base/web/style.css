@@ -52,6 +52,10 @@ button,input,select,textarea{
   z-index:10;
   flex:0 0 auto;
 }
+.app-update-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:0 0 auto;padding:12px;background:#26344f;border-bottom:1px solid #5074ff;}
+.app-update-banner[hidden]{display:none;}
+.app-update-banner span{min-width:0;overflow-wrap:anywhere;}
+.app-update-banner button{flex:0 0 auto;}
 .topbar-spacer{
   width:44px;
   height:44px;

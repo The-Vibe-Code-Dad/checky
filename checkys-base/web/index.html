@@ -11,8 +11,8 @@
   <meta name="theme-color" content="#1f1f1f">
   <title>Checky's List</title>
   <link rel="icon" type="image/png" href="./logo.png">
-  <link rel="stylesheet" href="./style.css?v=13">
-  <link rel="stylesheet" href="./checkys-base.css?v=13">
+  <link rel="stylesheet" href="./style.css?v=__CHECKY_BUILD__">
+  <link rel="stylesheet" href="./checkys-base.css?v=__CHECKY_BUILD__">
 </head>
   <body>
   <div id="app">
@@ -27,6 +27,11 @@
         <div class="title">Checky's List</div>
       </div>
       <div class="topbar-spacer" aria-hidden="true"></div>
+    </div>
+
+    <div id="appUpdateBanner" class="app-update-banner" role="status" aria-live="polite" hidden>
+      <span id="appUpdateNotice">A Checky update is ready.</span>
+      <button id="appUpdateApply" type="button" class="btn btn-primary">Update now</button>
     </div>
 
     <div id="navBackdrop" class="nav-backdrop hidden"></div>
@@ -77,6 +82,11 @@
       </section>
 
       <section id="settingsPanel" class="settings hidden">
+        <div class="setting-row">
+          <label>App updates</label>
+          <div class="inline"><button id="appUpdateCheck" type="button" class="btn btn-ghost">Check for app updates</button></div>
+          <div id="appUpdateStatus" class="hint" role="status" aria-live="polite">Checky checks for updates when you open or return to the app. There is no need to reinstall.</div>
+        </div>
         <div class="setting-row">
           <label>Event reminders</label>
           <div class="inline"><button id="notificationsToggle" type="button" class="btn btn-primary">Enable notifications</button></div>
@@ -198,13 +208,13 @@
 
   <div id="itemContextMenu" class="context-menu hidden"></div>
 
-  <script src="./auth-client.js?v=13"></script>
-  <script src="./auth-code-dialog.js?v=13"></script>
-  <script src="./checkys-base.js?v=13"></script>
-  <script src="./mobile-storage.js?v=13"></script>
-  <script src="./reminders.js?v=13"></script>
-  <script src="./renderer.js?v=13"></script>
-  <script src="./pwa.js?v=13"></script>
+  <script src="./auth-client.js?v=__CHECKY_BUILD__"></script>
+  <script src="./auth-code-dialog.js?v=__CHECKY_BUILD__"></script>
+  <script src="./checkys-base.js?v=__CHECKY_BUILD__"></script>
+  <script src="./mobile-storage.js?v=__CHECKY_BUILD__"></script>
+  <script src="./reminders.js?v=__CHECKY_BUILD__"></script>
+  <script src="./renderer.js?v=__CHECKY_BUILD__"></script>
+  <script src="./pwa.js?v=__CHECKY_BUILD__"></script>
 </body>
 </html>
 

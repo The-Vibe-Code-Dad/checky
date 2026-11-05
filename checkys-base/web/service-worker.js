@@ -1,16 +1,17 @@
-const CACHE_NAME = "checkys-pwa-v13";
+const BUILD = "__CHECKY_BUILD__";
+const CACHE_NAME = "checkys-pwa-" + BUILD;
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./style.css?v=13",
-  "./checkys-base.css?v=13",
-  "./auth-client.js?v=13",
-  "./auth-code-dialog.js?v=13",
-  "./checkys-base.js?v=13",
-  "./mobile-storage.js?v=13",
-  "./renderer.js?v=13",
-  "./reminders.js?v=13",
-  "./pwa.js?v=13",
+  "./style.css?v=__CHECKY_BUILD__",
+  "./checkys-base.css?v=__CHECKY_BUILD__",
+  "./auth-client.js?v=__CHECKY_BUILD__",
+  "./auth-code-dialog.js?v=__CHECKY_BUILD__",
+  "./checkys-base.js?v=__CHECKY_BUILD__",
+  "./mobile-storage.js?v=__CHECKY_BUILD__",
+  "./renderer.js?v=__CHECKY_BUILD__",
+  "./reminders.js?v=__CHECKY_BUILD__",
+  "./pwa.js?v=__CHECKY_BUILD__",
   "./manifest.webmanifest",
   "./icon-192.png",
   "./icon-512.png",
@@ -39,50 +40,40 @@ self.addEventListener('notificationclick', event => {
   }));
 });
 
-self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
-  self.skipWaiting();
+self.addEventListener('message', event => {
+  if (event.data?.type === 'CHECKY_VERSION') event.ports[0]?.postMessage({ version: BUILD });
 });
 
-self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
-      .then(() => self.clients.claim())
-  );
+self.addEventListener('install', event => {
+  // Publish the new worker only after the entire new shell is available offline.
+  event.waitUntil(caches.open(CACHE_NAME)
+    .then(cache => cache.addAll(APP_SHELL.map(url => new Request(url, { cache: 'reload' }))))
+    .then(() => self.skipWaiting()));
 });
 
-self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET") return;
+self.addEventListener('activate', event => {
+  event.waitUntil(caches.keys()
+    .then(keys => Promise.all(keys.filter(key => key.startsWith('checkys-pwa-') && key !== CACHE_NAME).map(key => caches.delete(key))))
+    .then(() => self.clients.claim()));
+});
+
+self.addEventListener('fetch', event => {
+  if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
-  if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
+  if (url.origin !== self.location.origin || url.pathname.startsWith('/api/') ||
+      ['/version.json', '/service-worker.js'].includes(url.pathname)) return;
 
-  if (event.request.mode === "navigate") {
-    event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put("./index.html", copy));
-          return response;
-        })
-        .catch(() => caches.match("./index.html"))
-    );
+  if (event.request.mode === 'navigate') {
+    event.respondWith(fetch(event.request, { cache: 'no-store' }).then(async response => {
+      if (!response.ok) throw new Error('App unavailable');
+      return response;
+    }).catch(() => caches.open(CACHE_NAME).then(cache => cache.match('./index.html'))));
     return;
   }
 
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const network = fetch(event.request)
-        .then((response) => {
-          if (response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-          }
-          return response;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
-  );
+  // Versioned assets are an immutable snapshot. Revalidating an old version's
+  // URL against a new deployment could mix incompatible scripts in its cache.
+  if (!APP_SHELL.some(asset => new URL(asset, self.location.href).href === url.href)) return;
+  event.respondWith(caches.open(CACHE_NAME).then(async cache =>
+    (await cache.match(event.request)) || fetch(event.request)));
 });
-

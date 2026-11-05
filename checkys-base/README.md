@@ -167,7 +167,11 @@ With plain Docker use `docker cp YOUR_POCKETBASE_CONTAINER:/pb/pb_data/checky-co
 
 ### Event reminders and browser notifications
 
-After an image update, close and reopen an installed Checky app while online to load the new controls. The app uses versioned scripts/styles so an older cached reminder module cannot be mixed with new controls.
+The installed app checks for updates on opening, returning to the foreground, and reconnecting. Once the new files finish downloading, **Update now** appears above the checklist. Tap it to save local changes and reload; sign-in, checklists, preferences and notification subscriptions are retained. An open reminder/tab edit, active sync, or failed save prevents the reload. **Settings > App updates > Check for app updates** runs a check on demand. No uninstall or storage clearing is needed.
+
+For an older installation without these controls, update the Docker containers, then close the installed app and any open Checky browser tabs and reopen Checky online once. If the old page remains open, open the site in its browser and refresh to load the updater. Future updates are available inside the app.
+
+Each Docker web build generates a version from the runtime files automatically, stamps its scripts/styles and service worker, and exposes `/version.json` without a cached update response. `latestwapp` inherits the same built web app. Update checks do not cache API responses or desktop installers, and failed downloads keep the previous complete offline app shell. For a custom static deployment, copy `web/` to an output directory and run `node scripts/build-web.cjs /path/to/copied-web` before deploying that copy; keep the source directory unstamped.
 
 1. Open Checky over HTTPS (localhost also works for testing). In **Settings > Event reminders**, choose **Enable notifications** and allow the browser prompt. Enable it separately on each browser/device.
 2. **Hold down an item or right-click it**, then choose **Remind**. Pick its date/time and select **Does not repeat**, **Every day**, **Every week**, **Every month**, or **Every year**. For **Every week**, select one or more days under **Repeat on** (for example Monday, Wednesday and Friday); the first reminder falls on a selected day on or after **Starts**, at the saved time. Choose **Save and sync** and wait for a successful sync before closing Checky. Offline edits keep their schedule locally but cannot be scheduled until synced.
@@ -189,9 +193,11 @@ Developer checks, from the repo root:
 
 ```bash
 npm ci --prefix checkys-base/pocketbase/push --ignore-scripts
-node --test checkys-base/test/reminders.test.cjs
+node --test checkys-base/test/reminders.test.cjs checkys-base/test/pwa.test.cjs
 CHECKY_POCKETBASE_BINARY=/path/to/pocketbase node checkys-base/test/reminders-integration.cjs
 ```
+
+`test/pwa-browser.cjs` starts its own disposable backend and checks three successive builds with actual service workers, failed downloads, offline fallback, foreground/manual checks and preservation of edits/session/preferences. Supply `CHECKY_POCKETBASE_BINARY`, `CHECKY_PLAYWRIGHT_MODULE`, and optionally `CHECKY_CHROMIUM_EXECUTABLE` and `CHECKY_SCREENSHOT_DIR`; CI runs this before publishing.
 
 The integration runner creates and removes its own disposable database under the configured temporary directory. `test/reminders-browser.cjs` uses a disposable localhost backend initialized by the existing security tests, with `CHECKY_TEST_URL`, an installed Playwright module (`CHECKY_PLAYWRIGHT_MODULE`), and optionally `CHECKY_CHROMIUM_EXECUTABLE` and `CHECKY_SCREENSHOT_DIR`. Push-provider responses/events are simulated in these regressions; verify real-device delivery after deploying to HTTPS.
 
