@@ -24,6 +24,9 @@
     }
 
     handle {
+      @appEntry path / /index.html /service-worker.js
+      header @appEntry Cache-Control "no-cache"
+
       @desktopUpdateManifest path /desktop-updates/latest.json
       header @desktopUpdateManifest Cache-Control "no-store, max-age=0"
 

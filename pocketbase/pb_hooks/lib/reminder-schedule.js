@@ -17,6 +17,26 @@ function latestOccurrence(item, now) {
     const year = anchor.year(), month = Number(anchor.month()), day = anchor.day()
     const anchorDay = Date.UTC(year, month - 1, day)
     const currentDay = Date.UTC(current.year(), Number(current.month()) - 1, current.day())
+    // Weekly schedules can select several weekdays. Older schedules use the
+    // original date's weekday; an explicitly empty/invalid selection sends nothing.
+    if (repeat === 'weekly' && item.reminderDays != null) {
+      if (!Array.isArray(item.reminderDays) || !item.reminderDays.length ||
+          item.reminderDays.some(day => !Number.isInteger(day) || day < 0 || day > 6)) return NaN
+      const clock = anchor.format('15:04:05.000')
+      // Eight days covers the previous weekly occurrence and a skipped DST time.
+      for (let offset = 0; offset <= 7; offset++) {
+        const date = new Date(currentDay - offset * 86400000)
+        if (date.getTime() < anchorDay) break
+        if (!item.reminderDays.includes(date.getUTCDay())) continue
+        if (date.getTime() === anchorDay) return first
+        const wallTime = date.toISOString().slice(0, 10) + ' ' + clock
+        const occurrence = new DateTime(wallTime, zoneName).time()
+        if (occurrence.in(zone).format('2006-01-02 15:04:05.000') !== wallTime) continue
+        const at = occurrence.unixMilli()
+        if (at >= first && at <= now) return at
+      }
+      return NaN
+    }
     let index
     if (repeat === 'daily' || repeat === 'weekly') index = Math.floor((currentDay - anchorDay) / (86400000 * (repeat === 'weekly' ? 7 : 1)))
     else if (repeat === 'monthly') index = (current.year() - year) * 12 + Number(current.month()) - month

@@ -210,6 +210,7 @@ function normalizeData(data) {
       reminderAt: typeof item?.reminderAt === "string" && Number.isFinite(Date.parse(item.reminderAt)) ? new Date(item.reminderAt).toISOString() : null,
       reminderRepeat: ['daily', 'weekly', 'monthly', 'yearly'].includes(item?.reminderRepeat) ? item.reminderRepeat : 'none',
       reminderTimeZone: typeof item?.reminderTimeZone === 'string' ? item.reminderTimeZone.slice(0, 120) : null,
+      reminderDays: Array.isArray(item?.reminderDays) ? [...new Set(item.reminderDays.filter(day => Number.isInteger(day) && day >= 0 && day <= 6))].sort() : null,
       originalTabName: typeof item?.originalTabName === "string" && item.originalTabName.trim() ? item.originalTabName.trim() : null
     }));
   });

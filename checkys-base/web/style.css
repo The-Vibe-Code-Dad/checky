@@ -698,3 +698,8 @@ hr{
 .reminder-dialog input,.reminder-dialog select{display:block;box-sizing:border-box;width:100%;margin:8px 0 16px;padding:10px;background:#17191e;color:#fff;border:1px solid #888;border-radius:6px;color-scheme:dark;}
 .reminder-dialog .inline{display:flex;flex-wrap:wrap;gap:8px;}
 .reminder-dialog [hidden]{display:none;}
+.reminder-dialog .reminder-days{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px;padding:12px;border:1px solid #888;border-radius:6px;}
+.reminder-dialog .reminder-days label{display:flex;align-items:center;gap:6px;min-height:44px;padding:0 8px;border-radius:6px;background:#17191e;cursor:pointer;}
+.reminder-dialog .reminder-days input{width:18px;height:18px;margin:0;accent-color:#5074ff;}
+.reminder-dialog .reminder-days label:has(input:checked){outline:2px solid #7894ff;}
+.reminder-dialog .reminder-days[hidden]{display:none;}

@@ -242,6 +242,7 @@ function normalizeData(data) {
       reminderAt: normalizeCompletedAt(item?.reminderAt),
       reminderRepeat: ['daily', 'weekly', 'monthly', 'yearly'].includes(item?.reminderRepeat) ? item.reminderRepeat : 'none',
       reminderTimeZone: typeof item?.reminderTimeZone === 'string' ? item.reminderTimeZone.slice(0, 120) : null,
+      reminderDays: Array.isArray(item?.reminderDays) ? [...new Set(item.reminderDays.filter(day => Number.isInteger(day) && day >= 0 && day <= 6))].sort() : null,
       originalTabName: sanitizeSingleLineText(item?.originalTabName, MAX_TAB_NAME_LENGTH) || null
     }));
   });
@@ -1191,9 +1192,17 @@ function renderItemContextMenu() {
       menuState.itemIndex === tab.items.length - 1
     );
     addAction("Mark done", () => markItemDone(menuState.tabIndex, menuState.itemIndex));
-    addAction("Remind", () => editItemReminder(tab.id, item.id), false, !!item.done);
+    addAction("Remind", () => editItemReminder(tab.id, item.id).catch(() => {
+      flashPullSyncIndicator("Reminder options could not open. Reopen Checky while online to update the app.", true, 8000);
+    }), false, !!item.done);
   }
   addAction("Delete", () => armItemDeleteConfirm(menuState.tabIndex, menuState.itemIndex), true);
+  positionItemContextMenu();
+}
+
+function positionItemContextMenu() {
+  const menuState = state.ui.itemContextMenu;
+  if (!menuState) return;
   const bounds = els.itemContextMenu.getBoundingClientRect();
   els.itemContextMenu.style.left = `${Math.max(8, Math.min(menuState.x, window.innerWidth - bounds.width - 8))}px`;
   els.itemContextMenu.style.top = `${Math.max(8, Math.min(menuState.y, window.innerHeight - bounds.height - 8))}px`;
@@ -1888,6 +1897,7 @@ async function editItemReminder(tabId, itemId) {
   current.reminderAt = value?.at || null;
   current.reminderRepeat = value?.repeat || 'none';
   current.reminderTimeZone = value?.timeZone || null;
+  current.reminderDays = value?.days || null;
   clearPendingSave();
   const saved = await persistChecklistSnapshot(createChecklistSnapshot(), ++lastChecklistSaveRequestId);
   renderItems();
@@ -2188,7 +2198,8 @@ function bindEvents() {
 
   window.addEventListener("resize", () => {
     if (!state.ui.itemContextMenu) return;
-    renderItemContextMenu();
+    // Keyboard/browser-chrome resizing must not replace a button under a finger.
+    positionItemContextMenu();
   });
 
   els.contentScroll.addEventListener("touchstart", (event) => {
@@ -2334,7 +2345,7 @@ async function init() {
     ? !hasHostedLoginCredentials()
     : false;
   render();
-  void window.checkyReminders.init(state.hostedSession.user.id);
+  void window.checkyReminders?.init(state.hostedSession.user.id);
   if (navigator.onLine && hasHostedLoginCredentials()) {
     setTimeout(async () => {
       await runManualSync("startup");
