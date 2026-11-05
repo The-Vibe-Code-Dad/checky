@@ -327,6 +327,11 @@ base:
 - Migrated earlier baby logs into separate `checky_baby_lists`, preserving entry IDs, timestamps, versions and content. Existing logs remain visible to the admin, who explicitly assigns caregivers; ordinary checklist deletions no longer delete baby logs.
 - Verified upgrades, permissions, revocation, membership conflicts, integrated admin/caregiver workflows, phone layout and retained day grouping with real PocketBase/Chromium. Web update/Done regressions, build/auth unit checks and actual Caddy framing-header checks passed.
 
+## v0065 - 2026-11-05
+- Moved baby-list administration to the PocketBase superuser dashboard: admins create/rename `checky_baby_lists` records and choose caregivers in `members`.
+- Removed the in-app management screen, membership/user-directory endpoints and Checky app-admin access bypass. Every app account needs explicit membership; Baby stays integrated beside Personal and Shared with the existing day-grouped log.
+- Added a migration that preserves lists/members/entries while removing the retired membership-editor version field. Verified native PocketBase create/rename/assign/revoke with two superusers, denied access for regular and first-user accounts, preserved upgrades and integrated navigation; all tracker integration and eight build/auth unit checks passed.
+
 desktop:
 
 ## v0001 - 2026-04-07
@@ -599,3 +604,6 @@ pocketbase:
 
 ## v0039 - 2026-11-05
 - Updated standalone backend add-on guidance for independent, admin-assigned baby lists and the migration of existing logs. The standard standalone backend still excludes Baby tracker code; optional installs retain the same database and accounts.
+
+## v0040 - 2026-11-05
+- Clarified that PocketBase superusers administer the optional Baby tracker through `checky_baby_lists.members`; Checky app-admin status grants no automatic baby access. Existing explicit assignments and database entries are retained.

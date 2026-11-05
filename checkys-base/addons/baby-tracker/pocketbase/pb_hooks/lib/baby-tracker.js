@@ -5,59 +5,19 @@ function auth(e) {
   if (!e.auth || e.auth.collection().name !== 'users') throw new UnauthorizedError('Sign in to open the baby tracker.')
   require(__hooks + '/lib/hosted-auth.js').requireSameOrigin(e)
 }
-function isAdmin(app, user) {
-  try { return app.findFirstRecordByData('checky_base_admins', 'key', 'primary').getString('user') === user.id } catch (_) { return false }
-}
-function requireAdmin(app, e) {
-  if (!isAdmin(app, e.auth)) throw new ForbiddenError('Only the Checky admin can manage baby lists and caregivers.')
-}
 function parent(app, e, ref) {
   const match = /^checky_baby_lists:([a-z0-9]{15})$/.exec(String(ref || ''))
   if (!match) throw new BadRequestError('Choose a baby list assigned by your admin.')
   let record
   try { record = app.findRecordById(LISTS, match[1]) } catch (_) { throw new NotFoundError('This baby list is unavailable.') }
-  if (!isAdmin(app, e.auth) && !Array.from(record.getStringSlice('members')).includes(e.auth.id)) throw new NotFoundError('This baby list is unavailable. Ask your admin to add you.')
+  if (!Array.from(record.getStringSlice('members')).includes(e.auth.id)) throw new NotFoundError('This baby list is unavailable. Ask your admin to add you.')
   return { record, field: 'babyList', ref: match[0] }
 }
 function entryParent(record) { return LISTS + ':' + record.getString('babyList') }
-function serializeList(record, admin) {
-  const item = { ref: LISTS + ':' + record.id, name: record.getString('name'), writable: true }
-  if (admin) { item.version = record.getInt('version'); item.members = Array.from(record.getStringSlice('members')) }
-  return item
-}
 function lists(e) {
   auth(e)
-  const admin = isAdmin(e.app, e.auth)
-  const records = e.app.findRecordsByFilter(LISTS, admin ? '' : 'members.id ?= {:user}', 'name,id', 0, 0, { user: e.auth.id })
-  return e.json(200, { items: records.map(record => serializeList(record, admin)), canManage: admin })
-}
-function users(e) {
-  auth(e); requireAdmin(e.app, e)
-  return e.json(200, { items: e.app.findRecordsByFilter('users', '', 'email,id', 0, 0).map(record => ({ id: record.id, email: record.getString('email') })) })
-}
-function saveList(e, creating) {
-  auth(e); requireAdmin(e.app, e)
-  const body = e.requestInfo().body || {}
-  const name = typeof body.name === 'string' ? body.name.trim() : ''
-  if (!name || name.length > 120 || /[\u0000-\u001F\u007F]/.test(name)) throw new BadRequestError('Enter a baby list name of 1–120 characters.')
-  if (!Array.isArray(body.members) || body.members.length > 1000 || body.members.some(id => typeof id !== 'string' || !/^[a-z0-9]{15}$/.test(id))) throw new BadRequestError('Choose valid Checky users.')
-  const members = [...new Set(body.members)]
-  let result
-  e.app.runInTransaction(app => {
-    requireAdmin(app, e)
-    for (const id of members) {
-      try { app.findRecordById('users', id) } catch (_) { throw new BadRequestError('One of these users no longer exists. Reopen the list and try again.') }
-    }
-    let record
-    if (creating) record = new Record(app.findCollectionByNameOrId(LISTS))
-    else {
-      try { record = app.findRecordById(LISTS, e.request.pathValue('id')) } catch (_) { throw new NotFoundError('This baby list is unavailable.') }
-      if (record.getInt('version') !== body.version) throw new ApiError(409, 'This baby list changed. Reopen it before saving caregivers again.')
-    }
-    record.set('name', name); record.set('members', members); record.set('version', creating ? 1 : record.getInt('version') + 1)
-    app.save(record); result = serializeList(record, true)
-  })
-  return e.json(200, result)
+  const records = e.app.findRecordsByFilter(LISTS, 'members.id ?= {:user}', 'name,id', 0, 0, { user: e.auth.id })
+  return e.json(200, { items: records.map(record => ({ ref: LISTS + ':' + record.id, name: record.getString('name'), writable: true })) })
 }
 function payload(value) {
   const data = value && typeof value === 'object' && !Array.isArray(value) ? value : {}
@@ -140,4 +100,4 @@ function mutate(e, deleting) {
   })
   return e.json(200, saved)
 }
-module.exports = { status: e => { auth(e); return e.json(200, { installed: true }) }, lists, users, createList: e => saveList(e, true), updateList: e => saveList(e, false), list, create, update: e => mutate(e, false), remove: e => mutate(e, true) }
+module.exports = { status: e => { auth(e); return e.json(200, { installed: true }) }, lists, list, create, update: e => mutate(e, false), remove: e => mutate(e, true) }

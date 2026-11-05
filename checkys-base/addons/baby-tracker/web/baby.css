@@ -32,11 +32,6 @@ textarea{resize:vertical;white-space:pre-wrap}
 .embedded h1{font-size:24px}
 .embedded .list-picker{display:flex;justify-content:flex-end}
 .embedded .list-picker button{padding:6px 12px}
-#manageLists{margin:8px 0 12px}
-.list-name{margin-top:16px}
-.member-choices{max-height:260px;overflow:auto}
-.member-choices .check{overflow-wrap:anywhere;font-weight:400}
-#listError{color:#ffb2b2}
 .archive-month{margin:24px 0 8px;font-size:16px;font-weight:700;color:#d7dfef}
 .archive-day{margin:18px 0 6px;font-size:14px;font-weight:600;color:#9eb2d4}
 .entry{padding:18px;background:var(--panel);border:1px solid var(--border);border-radius:12px;margin:12px 0}
