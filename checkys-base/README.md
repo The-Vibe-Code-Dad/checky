@@ -43,7 +43,7 @@ The hosted web app currently:
 
 ## Optional Baby tracker add-on
 
-Baby tracker is installed separately, like the Windows app-hosting option. Standard `latest` and `latestwapp` installations contain no tracker files, routes or migration. Installing the optional web and PocketBase variants adds **Baby** beside Personal and Shared in list navigation, using the **same existing database and accounts**. The admin creates independent baby lists and assigns their caregivers; selecting a baby list keeps the normal Checky navigation available. It does not require another database or Base instance.
+Baby tracker is installed separately, like the Windows app-hosting option. Standard `latest` and `latestwapp` installations contain no tracker files, routes or migration. Installing the optional web and PocketBase variants adds **Baby** beside Personal and Shared in list navigation, using the **same existing database and accounts**. PocketBase admins create independent baby lists and assign caregivers through `checky_baby_lists.members`; selecting a baby list keeps the normal Checky navigation available. It does not require another database or Base instance.
 
 Use `latestbaby` on both services, or `latestwappbaby` on web plus `latestbaby` on PocketBase to include Windows app hosting too. These tags are available only after the publishing workflow has successfully released the add-on. See the [Baby tracker installation guide](addons/baby-tracker/README.md) for CasaOS installation, updates, removal, data retention and source builds. A fresh optional installation can use [`docker-compose.casaos-baby.yml`](docker-compose.casaos-baby.yml); an existing installation should change its current image tags while retaining the active data folder and configuration.
 

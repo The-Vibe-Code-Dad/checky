@@ -6,7 +6,6 @@
   const embedded = window.parent !== window && params.get('embedded') === '1';
   document.body.classList.toggle('embedded', embedded);
   const notifyLists = () => { if (embedded) parent.postMessage({ type: 'checky-addon-lists-changed' }, location.origin); };
-  let canManage = false, managed = null, caregivers = [], managerDirty = false, managerSaving = false;
   let user, lists = [], entries = [], current = '', more = false, loading = false, saving = false;
   let editing = null, requestId = '', dirty = false, canonical = {}, unit = 'ml', editorUnit = 'ml';
   function status(message, error = false) { $('status').textContent = message; $('status').classList.toggle('error', error); }
@@ -115,12 +114,10 @@
     try { unit = localStorage.getItem(preferenceKey()) === 'oz' ? 'oz' : 'ml'; } catch (_) {}
     $('units').value = unit; updateScope();
     if (current) await load();
-    else status(canManage ? 'Create a baby list and choose its caregivers.' : 'No baby list assigned. Ask your admin to add you to a baby list.');
-    if (canManage && params.get('manage') === '1') await openManager();
+    else status('No baby list assigned. Ask your PocketBase admin to add you to a baby list.');
   }
   async function refreshLists() {
-    const result = await api(apiRoot + '/lists'); lists = result.items; canManage = result.canManage === true;
-    $('manageLists').hidden = !canManage;
+    const result = await api(apiRoot + '/lists'); lists = result.items;
     $('listPicker').replaceChildren();
     for (const list of lists) {
       const option = node('option', '', list.name); option.value = list.ref; $('listPicker').append(option);
@@ -129,73 +126,18 @@
   function updateScope() {
     $('tracker').hidden = !activeList();
     $('listPicker').value = current;
-    $('sharingHint').textContent = 'Shared only with caregivers assigned to this baby list by the admin.';
+    $('sharingHint').textContent = 'Shared only with caregivers assigned to this baby list in PocketBase.';
     document.querySelector('h1').textContent = activeList()?.name || 'Baby tracker';
     const address = new URL(location.href);
     if (current) address.searchParams.set('list', current); else address.searchParams.delete('list');
     history.replaceState(null, '', address);
     controls();
   }
-  function fillManager(ref) {
-    managed = lists.find(list => list.ref === ref) || null;
-    $('managedList').value = managed?.ref || '';
-    $('babyListName').value = managed?.name || '';
-    $('memberChoices').replaceChildren();
-    for (const user of caregivers) {
-      const label = node('label', 'check');
-      const checkbox = node('input'); checkbox.type = 'checkbox'; checkbox.value = user.id;
-      checkbox.checked = managed?.members.includes(user.id) || false;
-      label.append(checkbox, document.createTextNode(user.email)); $('memberChoices').append(label);
-    }
-    $('saveList').textContent = managed ? 'Save list and caregivers' : 'Create baby list';
-    $('listError').textContent = ''; managerDirty = false;
-  }
-  async function openManager() {
-    try {
-      await refreshLists();
-      caregivers = (await api(apiRoot + '/admin/users')).items;
-      $('managedList').replaceChildren();
-      const create = node('option', '', '+ New baby list'); create.value = ''; $('managedList').append(create);
-      for (const list of lists) { const option = node('option', '', list.name); option.value = list.ref; $('managedList').append(option); }
-      fillManager(current);
-      $('listManager').showModal(); $('listManagerTitle').focus();
-    } catch (error) { fail(error); }
-  }
-  function closeManager() {
-    if (managerSaving || managerDirty && !confirm('Discard changes to this baby list?')) return;
-    managerDirty = false; $('listManager').close();
-  }
-  $('manageLists').onclick = openManager;
-  $('closeListManager').onclick = closeManager;
-  $('listManager').oncancel = event => { event.preventDefault(); closeManager(); };
-  $('managedList').onchange = () => {
-    if (managerDirty && !confirm('Discard changes to this baby list?')) { $('managedList').value = managed?.ref || ''; return; }
-    fillManager($('managedList').value);
-  };
-  $('listForm').oninput = event => { if (event.target.id !== 'managedList') managerDirty = true; };
-  $('listForm').onsubmit = async event => {
-    event.preventDefault(); if (managerSaving) return;
-    $('listError').textContent = ''; managerSaving = true;
-    for (const field of $('listForm').elements) field.disabled = true;
-    try {
-      const body = { name: $('babyListName').value, members: [...$('memberChoices').querySelectorAll('input:checked')].map(input => input.value) };
-      if (managed) body.version = managed.version;
-      const saved = await api(apiRoot + '/lists' + (managed ? '/' + managed.ref.split(':')[1] : ''), managed ? 'PATCH' : 'POST', body);
-      managerDirty = false; $('listManager').close();
-      await refreshLists(); current = saved.ref; entries = []; more = false; updateScope(); render();
-      notifyLists(); await load(); status('Baby list saved. Only assigned caregivers and the admin can open it.');
-      if (embedded) parent.postMessage({ type: 'checky-addon-selected-list', ref: current, name: saved.name }, location.origin);
-    } catch (error) {
-      if ($('listManager').open) $('listError').textContent = error.message;
-      else { status('Baby list saved. Reopen it after reconnecting to refresh access and entries.', true); notifyLists(); }
-    }
-    finally { managerSaving = false; for (const field of $('listForm').elements) field.disabled = false; }
-  };
-  window.checkyAddonBusy = () => saving || managerSaving || $('editor').open || $('listManager').open;
+  window.checkyAddonBusy = () => saving || $('editor').open;
   window.checkyCanLeave = () => {
-    if (saving || managerSaving) { status('Wait for your changes to finish saving.', true); return false; }
-    if ((dirty || managerDirty) && !confirm('Discard unsaved changes before switching lists?')) return false;
-    dirty = false; managerDirty = false; return true;
+    if (saving) { status('Wait for your changes to finish saving.', true); return false; }
+    if (dirty && !confirm('Discard unsaved changes before switching lists?')) return false;
+    dirty = false; return true;
   };
   function localDateTime(iso) {
     const date = new Date(iso);
@@ -288,8 +230,8 @@
     if ($('deleteEntry').textContent !== 'Confirm delete') { $('deleteEntry').textContent = 'Confirm delete'; return; }
     void save(true);
   };
-  window.addEventListener('beforeunload', event => { if (dirty || saving || managerDirty || managerSaving) { event.preventDefault(); event.returnValue = ''; } });
-  const refreshIfIdle = () => { if (user && current && !$('editor').open && !$('listManager').open && !document.hidden) load(false, true).catch(fail); };
+  window.addEventListener('beforeunload', event => { if (dirty || saving) { event.preventDefault(); event.returnValue = ''; } });
+  const refreshIfIdle = () => { if (user && current && !$('editor').open && !document.hidden) load(false, true).catch(fail); };
   window.addEventListener('online', refreshIfIdle);
   document.addEventListener('visibilitychange', refreshIfIdle);
   setInterval(refreshIfIdle, 30000);

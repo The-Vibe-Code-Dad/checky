@@ -70,7 +70,7 @@ x-casaos:
   tagline:
     en_US: Checklists with the separately installed Baby tracker
   description:
-    en_US: Checky Base with the Baby tracker add-on. Uses the same database and accounts, with separate baby lists assigned by the admin. Keep the existing data directory when adding this to an installation.
+    en_US: Checky Base with the Baby tracker add-on. Uses the same database and accounts, with separate baby lists assigned by PocketBase admins. Keep the existing data directory when adding this to an installation.
   category: Productivity
   author: The-Vibe-Code-Dad
   developer: The-Vibe-Code-Dad

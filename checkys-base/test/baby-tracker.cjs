@@ -49,6 +49,7 @@ async function main() {
       await fs.cp(path.join(addon, 'pocketbase', folder), path.join(dir, 'backend', folder), { recursive: true });
     }
     await fs.rm(path.join(dir, 'backend/pb_migrations/202611050002_checky_baby_lists.js'));
+    await fs.rm(path.join(dir, 'backend/pb_migrations/202611050003_checky_baby_pocketbase_admin.js'));
     await startBackend(false);
     await req('/api/checkys-base/first-user', 'POST', { email: 'admin@baby.invalid', password, passwordConfirm: password });
     const admin = await req('/api/collections/_superusers/auth-with-password', 'POST', { identity: 'admin@baby.invalid', password });
@@ -80,33 +81,41 @@ async function main() {
     const endpoint = '/api/checkys-base/baby/entries', listEndpoint = '/api/checkys-base/baby/lists';
     await req(listEndpoint, 'GET', undefined, undefined, 401);
     assert.deepEqual((await req(listEndpoint, 'GET', undefined, tokens[0])).items, []);
-    const migratedLists = await req(listEndpoint, 'GET', undefined, adminUser.token);
-    assert.equal(migratedLists.canManage, true); assert.equal(migratedLists.items.length, 2);
+    const listRecords = '/api/collections/checky_baby_lists/records';
+    const migratedLists = await req(listRecords, 'GET', undefined, admin.token);
+    assert.equal(migratedLists.items.length, 2);
     const babyList = migratedLists.items.find(item => item.name === 'Baby · Baby log');
     assert.deepEqual(babyList.members, []);
-    const ref = babyList.ref;
-    const migrated = (await req(endpoint + '?list=' + ref, 'GET', undefined, adminUser.token)).items[0];
-    assert.equal(migrated.id, legacy.id); assert.equal(migrated.version, 7); assert.deepEqual(migrated.entry, seed);
+    const ref = 'checky_baby_lists:' + babyList.id;
+    const migrated = await req('/api/collections/checky_baby_entries/records/' + legacy.id, 'GET', undefined, admin.token);
+    assert.equal(migrated.version, 7); assert.deepEqual(migrated.data, seed); assert.equal(migrated.babyList,babyList.id);
     await req(endpoint + '?list=' + ref, 'GET', undefined, tokens[1], 404);
-    for (const token of tokens) {
-      await req(listEndpoint, 'POST', {name:'Self assigned', members:[users[0].id]}, token, 403);
-      await req(listEndpoint + '/' + ref.split(':')[1], 'PATCH', {version:1,name:'Self assigned',members:[users[0].id]}, token, 403);
-      await req('/api/checkys-base/baby/admin/users', 'GET', undefined, token, 403);
-      await req('/api/collections/checky_baby_lists/records', 'POST', {name:'Bypass',members:[users[0].id],version:1}, token, 403);
-      await req('/api/collections/checky_baby_lists/records/' + ref.split(':')[1], 'PATCH', {members:[users[0].id]}, token, 403);
+    await req(endpoint + '?list=' + ref, 'GET', undefined, adminUser.token, 404);
+    assert.deepEqual((await req(listEndpoint,'GET',undefined,adminUser.token)).items, []);
+    // Assign before the new migration to verify earlier explicit membership is kept.
+    await req(listRecords + '/' + babyList.id, 'PATCH', {version:2,name:'Family baby log',members:[users[0].id,users[1].id]}, admin.token);
+    await stopBackend();
+    await fs.copyFile(path.join(addon, 'pocketbase/pb_migrations/202611050003_checky_baby_pocketbase_admin.js'), path.join(dir, 'backend/pb_migrations/202611050003_checky_baby_pocketbase_admin.js'));
+    await startBackend(true);
+    const upgradedList = await req(listRecords + '/' + babyList.id, 'GET', undefined, admin.token);
+    assert.equal(upgradedList.version,undefined);
+    assert.deepEqual([...upgradedList.members].sort(),[users[0].id,users[1].id].sort());
+    for (const token of [...tokens,adminUser.token]) {
+      await req(listRecords, 'POST', {name:'Bypass',members:[users[0].id]}, token, 403);
+      await req(listRecords + '/' + babyList.id, 'PATCH', {members:[users[0].id]}, token, 403);
+      await req(listRecords + '/' + babyList.id, 'DELETE', undefined, token, 403);
+      await req(listRecords, 'GET', undefined, token, 403);
+      await req('/api/checkys-base/baby/admin/users', 'GET', undefined, token, 404);
+      await req(listEndpoint + '/' + babyList.id, 'PATCH', {members:[users[0].id]}, token, 404);
     }
-    await req(listEndpoint, 'POST', {name:'Forged origin',members:[]}, adminUser.token, 403, {Origin:'https://forged.invalid'});
-    await req(listEndpoint, 'POST', {name:'Invalid member',members:['not-a-user']}, adminUser.token, 400);
-    const membership = await req(listEndpoint + '/' + ref.split(':')[1], 'PATCH', {version:1,name:'Family baby log',members:[users[0].id,users[1].id]}, adminUser.token);
-    await req(listEndpoint + '/' + ref.split(':')[1], 'PATCH', {version:1,name:'Stale',members:[]}, adminUser.token, 409);
-    assert.equal(membership.version,2);
+    await req(listRecords, 'POST', {name:'Invalid member',members:['not-a-user']}, admin.token, 400);
     assert.equal((await req(listEndpoint,'GET',undefined,tokens[1])).items[0].ref,ref);
-    assert.equal((await req(listEndpoint,'GET',undefined,tokens[1])).canManage,false);
+    assert.equal((await req(listEndpoint,'GET',undefined,tokens[1])).items[0].members,undefined);
     await req(endpoint + '/' + legacy.id, 'DELETE', {version:7}, tokens[0]);
     const personalMigrated = await req('/api/collections/checky_baby_entries/records/' + legacyPersonal.id, 'GET', undefined, admin.token);
     assert.ok(personalMigrated.babyList); assert.equal(personalMigrated.personalChecklist, undefined);
     assert.equal(personalMigrated.version,3); assert.deepEqual(personalMigrated.data,seed);
-    console.log('PASS independent baby lists, preserved upgrade data, explicit admin assignment, locked collection APIs and membership conflict protection');
+    console.log('PASS PocketBase-superuser-only list management, preserved upgrade data/membership, no first-user bypass and locked app APIs');
     const created = await req(endpoint, 'POST', { list: ref, requestId: 'unique-create-request-0001', entry: seed }, tokens[0]);
     const retried = await req(endpoint, 'POST', { list: ref, requestId: 'unique-create-request-0001', entry: seed }, tokens[0]);
     assert.equal(retried.id, created.id, 'Retry after a lost response must not duplicate an entry');
@@ -128,7 +137,7 @@ async function main() {
       await req(endpoint, 'POST', { list: ref, requestId: crypto.randomUUID(), entry }, tokens[0], 400);
     }
     await req(endpoint, 'POST', { list: ref, requestId: crypto.randomUUID(), entry: seed }, tokens[0], 403, { Origin: 'https://forged.invalid' });
-    const personal = (await req(listEndpoint, 'POST', {name:'Separate baby list',members:[users[0].id]}, adminUser.token)).ref;
+    const personal = 'checky_baby_lists:' + (await req(listRecords, 'POST', {name:'Separate baby list',members:[users[0].id]}, admin.token)).id;
     const privateEntry = await req(endpoint, 'POST', { list: personal, requestId: crypto.randomUUID(), entry: seed }, tokens[0]);
     await req(endpoint + '?list=' + personal, 'GET', undefined, tokens[1], 404);
     // Same timestamps still paginate without gaps or duplicates.
@@ -255,7 +264,8 @@ async function main() {
     assert.equal(new URL(page.url()).searchParams.has('addon'), false);
     await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
     assert.equal((await req(endpoint + '?list=' + ref, 'GET', undefined, tokens[1])).items.length, 1);
-    // The Checky admin manages independent baby lists inside the same shell.
+    // PocketBase superusers use the native collection API behind their dashboard.
+    // A Checky first-user/admin account has the same assignment rules as everyone.
     const adminContext = await browser.newContext({viewport:{width:1100,height:900}});
     const adminPage = await adminContext.newPage();
     adminPage.on('pageerror', error => errors.push(error.message));
@@ -265,38 +275,39 @@ async function main() {
     await adminPage.locator('#loginOverlay').waitFor({state:'hidden'});
     await adminPage.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
     await adminPage.locator('#navToggle').click();
-    await adminPage.getByRole('button',{name:'Manage baby lists',exact:true}).click();
-    const manager = adminPage.frameLocator('#addonFrame');
-    await manager.locator('#listManager').waitFor({state:'visible'});
-    await manager.locator('#managedList').selectOption('');
-    await manager.locator('#babyListName').fill('Baby without a Shared checklist');
-    await manager.locator('#memberChoices input[value="' + users[2].id + '"]').check();
-    await manager.locator('#saveList').click();
-    await manager.locator('#listManager').waitFor({state:'hidden'});
-    await manager.getByRole('heading',{name:'Baby without a Shared checklist',exact:true}).waitFor();
-    const independent = (await req(listEndpoint,'GET',undefined,tokens[2])).items[0];
-    assert.equal(independent.name,'Baby without a Shared checklist');
-    assert.equal((await req(listEndpoint,'GET',undefined,tokens[1])).items.some(item=>item.ref===independent.ref),false);
+    const adminFolder = adminPage.locator('[data-addon-id="baby-tracker"]');
+    await adminFolder.getByText('No lists assigned.',{exact:false}).waitFor();
+    assert.equal(await adminFolder.getByRole('button').count(),0);
+    await req('/api/collections/_superusers/records','POST',{email:'second-admin@baby.invalid',password,passwordConfirm:password},admin.token);
+    const secondAdmin = await req('/api/collections/_superusers/auth-with-password','POST',{identity:'second-admin@baby.invalid',password});
+    const independent = await req(listRecords,'POST',{name:'PocketBase assigned baby list',members:[adminUser.record.id,users[2].id]},secondAdmin.token);
+    const independentRef = 'checky_baby_lists:' + independent.id;
+    assert.equal((await req(listEndpoint,'GET',undefined,tokens[2])).items[0].ref,independentRef);
+    await adminPage.locator('#refreshChecklistsBtn').click();
+    await adminFolder.getByRole('button',{name:independent.name,exact:true}).click();
+    const assigned = adminPage.frameLocator('#addonFrame');
+    await assigned.getByRole('heading',{name:independent.name,exact:true}).waitFor();
+    assert.equal(await assigned.locator('#manageLists').count(),0);
+    assert.equal(await assigned.locator('#listManager').count(),0);
+    assert.equal(await assigned.locator('#addEntry').isEnabled(),true);
     assert.equal(new URL(adminPage.url()).pathname,'/');
-    await manager.locator('#manageLists').click();
-    await manager.locator('#babyListName').fill('Renamed baby list');
-    await manager.locator('#memberChoices input[value="' + users[2].id + '"]').uncheck();
-    await manager.locator('#saveList').click(); await manager.locator('#listManager').waitFor({state:'hidden'});
-    await manager.getByRole('heading',{name:'Renamed baby list',exact:true}).waitFor();
-    await req(endpoint + '?list=' + independent.ref,'GET',undefined,tokens[2],404);
-    if (process.env.CHECKY_SCREENSHOT_DIR) {
-      await adminPage.locator('#navToggle').click();
-      await adminPage.getByRole('button',{name:'Renamed baby list',exact:true}).waitFor();
-      await adminPage.waitForFunction(() => !state.ui.availableChecklistsLoading);
-      await adminPage.screenshot({path:path.join(process.env.CHECKY_SCREENSHOT_DIR,'baby-integrated-admin.png')});
-    }
+    await req(listRecords + '/' + independent.id,'PATCH',{name:'Renamed in PocketBase',members:[users[2].id]},secondAdmin.token);
+    await assigned.locator('#refresh').click();
+    await assigned.locator('#tracker').waitFor({state:'hidden'});
+    await assigned.getByText('This baby list is unavailable.',{exact:false}).waitFor();
+    await adminPage.locator('#navToggle').click();
+    await adminFolder.getByText('No lists assigned.',{exact:false}).waitFor();
+    assert.equal(await adminFolder.getByRole('button').count(),0);
+    assert.equal((await req(listEndpoint,'GET',undefined,tokens[2])).items[0].name,'Renamed in PocketBase');
+    await req(listRecords + '/' + independent.id,'PATCH',{members:[]},admin.token);
+    await req(endpoint + '?list=' + independentRef,'GET',undefined,tokens[2],404);
     await adminContext.close();
-    console.log('PASS integrated admin create/rename/assign/remove controls and independent baby-list membership');
+    console.log('PASS PocketBase admin create/rename/assign/revoke flow, multiple superusers and integrated member-only navigation');
     // Ordinary Shared membership is independent. Only the baby-list admin assignment controls baby access.
     await req('/api/collections/shared_checklists/records/' + shared.id, 'PATCH', { sharedWith: [] }, admin.token);
     await req('/api/collections/users/records/' + users[1].id, 'PATCH', { assignedSharedChecklist: '' }, admin.token);
     await req(endpoint + '?list=' + ref, 'GET', undefined, tokens[1]);
-    await req(listEndpoint + '/' + ref.split(':')[1], 'PATCH', {version:2,name:'Family baby log',members:[users[0].id]}, adminUser.token);
+    await req(listRecords + '/' + babyList.id, 'PATCH', {members:[users[0].id]}, admin.token);
     await req(endpoint + '?list=' + ref, 'GET', undefined, tokens[1], 404);
     await req(endpoint + '/' + created.id, 'PATCH', { version: 2, entry: seed }, tokens[1], 404);
     // Uninstall only the add-on code; keep the same database and existing users.
