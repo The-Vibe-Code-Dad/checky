@@ -179,6 +179,8 @@ const els = {
   list: document.getElementById("list"),
   addTabBtn: document.getElementById("addTabBtn"),
   installedAddonLinks: document.getElementById("installedAddonLinks"),
+  addonView: document.getElementById("addonView"),
+  addonFrame: document.getElementById("addonFrame"),
   addItemBtn: document.getElementById("addItemBtn"),
   settingsPanel: document.getElementById("settingsPanel"),
   doneToggle: document.getElementById("doneToggle"),
@@ -423,6 +425,7 @@ function addAlwaysShowOption(container, tab, input) {
 }
 
 async function openAlwaysVisibleTab(pin) {
+  if (!leaveInstalledAddon()) return;
   if (state.ui.syncInProgress || state.ui.availableChecklistsLoading) return;
   if (pin.checklistId !== (state.currentChecklistId || "local")) {
     if (!await useSelectedChecklist(pin.checklistId)) return;
@@ -504,7 +507,7 @@ function renderChecklistPicker() {
     group.dataset.folder = folderKey;
     group.open = state.ui.checklistFoldersOpen[folderKey] ?? (current?.isPersonal === isPersonal);
     const heading = document.createElement("summary");
-    heading.className = "folder-tab-heading" + (current?.isPersonal === isPersonal ? " active" : "");
+    heading.className = "folder-tab-heading" + (!activeAddon && current?.isPersonal === isPersonal ? " active" : "");
     heading.draggable = true;
     heading.title = "Expand " + name + "; drag to reorder";
     const triangle = document.createElement("span");
@@ -533,7 +536,7 @@ function renderChecklistPicker() {
       event.preventDefault();
       group.open = !group.open;
       state.ui.checklistFoldersOpen[folderKey] = group.open;
-      if (group.open && items.length === 1 && items[0].id !== state.currentChecklistId && !busy) {
+      if (group.open && items.length === 1 && (activeAddon || items[0].id !== state.currentChecklistId) && !busy) {
         void useSelectedChecklist(items[0].id);
       }
     };
@@ -565,7 +568,7 @@ function renderChecklistPicker() {
         button.type = "button";
         button.className = "tab checklist-choice" + (isCurrent ? " active" : "");
         button.setAttribute("aria-current", String(isCurrent));
-        button.disabled = busy || isCurrent;
+        button.disabled = busy || (isCurrent && !activeAddon);
         button.textContent = item.label || item.name || name + " checklist";
         button.onclick = () => void useSelectedChecklist(item.id);
         contents.appendChild(button);
@@ -587,7 +590,7 @@ function isSettingsOpen() {
 }
 
 function isSpecialViewOpen() {
-  return state.ui.settingsViewOpen || state.ui.doneViewOpen;
+  return state.ui.settingsViewOpen || state.ui.doneViewOpen || !!activeAddon;
 }
 
 function rememberCurrentChecklistTab() {
@@ -607,12 +610,14 @@ function closeDrawer() {
 }
 
 function openDrawer() {
+  void loadInstalledAddons();
   closeItemContextMenu();
   setDrawerOpen(true);
   if (!state.ui.syncInProgress) void loadAvailableChecklists();
 }
 
 function openSettingsView() {
+  if (!leaveInstalledAddon()) return;
   rememberCurrentChecklistTab();
   state.ui.settingsViewOpen = true;
   state.ui.doneViewOpen = false;
@@ -622,6 +627,7 @@ function openSettingsView() {
 }
 
 function openDoneView() {
+  if (!leaveInstalledAddon()) return;
   const doneTabIndex = getDoneTabIndex();
   if (doneTabIndex === -1) return;
   rememberCurrentChecklistTab();
@@ -783,7 +789,11 @@ async function loadAvailableChecklists() {
 }
 
 async function useSelectedChecklist(selectedChecklistId) {
-  if (state.ui.syncInProgress || state.ui.availableChecklistsLoading || !selectedChecklistId || selectedChecklistId === state.currentChecklistId) return;
+  if (state.ui.syncInProgress || state.ui.availableChecklistsLoading || !selectedChecklistId) return;
+  if (!leaveInstalledAddon()) return false;
+  if (selectedChecklistId === state.currentChecklistId) {
+    state.ui.settingsViewOpen = false; state.ui.doneViewOpen = false; closeDrawer(); render(); return true;
+  }
 
   state.ui.syncInProgress = true;
   state.ui.availableChecklistsError = false;
@@ -1366,45 +1376,113 @@ function isItemDeleteConfirmPending(tabIndex, itemIndex) {
   return state.ui.itemDeleteConfirmIndex?.tabIndex === tabIndex && state.ui.itemDeleteConfirmIndex?.itemIndex === itemIndex;
 }
 
-let installedAddons = [];
+let installedAddons = [], activeAddon = null, addonLoadGeneration = 0;
 async function loadInstalledAddons() {
-  installedAddons = [];
+  const generation = ++addonLoadGeneration;
   const account = state.hostedSession.user.id;
-  if (!state.hostedSession.authenticated) { renderInstalledAddons(); return; }
+  if (!state.hostedSession.authenticated) { installedAddons = []; renderInstalledAddons(); return; }
   try {
     const response = await fetch('./addons.json', { cache: 'no-store', credentials: 'same-origin', signal: AbortSignal.timeout(10000) });
     const manifest = response.ok ? await response.json() : [];
     const candidates = Array.isArray(manifest) ? manifest.slice(0, 16) : [];
+    const endpoint = value => typeof value === 'string' && /^\/api\/checkys-base\/[a-z0-9/-]+$/.test(value);
     const available = await Promise.all(candidates.map(async addon => {
       if (!addon || !/^[a-z0-9-]{1,60}$/.test(addon.id) || typeof addon.name !== 'string' ||
-          !/^\/[a-z0-9-]+(?:\/[a-z0-9-]+)*\/$/.test(addon.href) || !/^\/api\/checkys-base\/[a-z0-9/-]+$/.test(addon.probe)) return null;
+          !/^\/[a-z0-9-]+(?:\/[a-z0-9-]+)*\/$/.test(addon.href) || !endpoint(addon.probe) || (addon.lists && !endpoint(addon.lists))) return null;
       try {
-        const check = await fetch(addon.probe, { cache: 'no-store', credentials: 'same-origin', signal: AbortSignal.timeout(10000) });
-        return check.ok && (await check.json()).installed === true ? addon : null;
+        const options = { cache: 'no-store', credentials: 'same-origin', signal: AbortSignal.timeout(10000) };
+        const check = await fetch(addon.probe, options);
+        if (!check.ok || (await check.json()).installed !== true) return null;
+        let data = { items: [], canManage: false };
+        if (addon.lists) {
+          const result = await fetch(addon.lists, options);
+          if (!result.ok) return null;
+          data = await result.json();
+        }
+        return { ...addon, canManage: data.canManage === true, items: Array.isArray(data.items) ? data.items.filter(item =>
+          item && /^[a-z_]+:[a-z0-9]{15}$/.test(item.ref) && typeof item.name === 'string') : [] };
       } catch (_) { return null; }
     }));
-    if (state.hostedSession.user.id === account) installedAddons = available.filter(Boolean);
-  } catch (_) { /* A standard installation has no add-ons. */ }
+    if (generation !== addonLoadGeneration || state.hostedSession.user.id !== account) return;
+    installedAddons = available.filter(Boolean);
+  } catch (_) { return; }
   renderInstalledAddons();
-}
-
-function renderInstalledAddons() {
-  els.installedAddonLinks.replaceChildren();
-  for (const addon of installedAddons) {
-    const button = document.createElement('button');
-    button.type = 'button'; button.className = 'tab addon-link';
-    button.dataset.addonId = addon.id;
-    button.textContent = addon.name.slice(0, 120);
-    button.disabled = state.ui.syncInProgress || !state.currentChecklistId;
-    button.onclick = async () => {
-      if (!await flushPendingSave()) { setStatus('Could not save your checklist. Try again before opening the add-on.', true); return; }
-      const url = new URL(addon.href, location.origin);
-      url.searchParams.set('list', state.currentChecklistId);
-      location.assign(url.href);
-    };
-    els.installedAddonLinks.append(button);
+  if (!activeAddon) {
+    const params = new URLSearchParams(location.search);
+    const addon = installedAddons.find(item => item.id === params.get('addon'));
+    const item = addon?.items.find(item => item.ref === params.get('list'));
+    if (addon && (item || addon.canManage && params.get('manage') === '1')) void openInstalledAddon(addon, item, !item);
   }
 }
+function leaveInstalledAddon() {
+  if (!activeAddon) return true;
+  if (els.addonFrame.contentWindow?.checkyCanLeave && !els.addonFrame.contentWindow.checkyCanLeave()) return false;
+  activeAddon = null;
+  els.addonFrame.src = 'about:blank';
+  const url = new URL(location.href);
+  for (const key of ['addon', 'list', 'manage']) url.searchParams.delete(key);
+  history.replaceState(null, '', url);
+  return true;
+}
+async function openInstalledAddon(addon, item, manage = false) {
+  if (state.ui.syncInProgress || !leaveInstalledAddon()) return;
+  if (!await flushPendingSave()) { setStatus('Could not save your checklist. Try again before opening the list.', true); render(); return; }
+  rememberCurrentChecklistTab();
+  activeAddon = { id: addon.id, ref: item?.ref || '', manage };
+  state.ui.settingsViewOpen = false; state.ui.doneViewOpen = false;
+  const url = new URL(addon.href, location.origin);
+  url.searchParams.set('embedded', '1');
+  if (item) url.searchParams.set('list', item.ref);
+  if (manage) url.searchParams.set('manage', '1');
+  els.addonFrame.title = item?.name || addon.name;
+  els.addonFrame.src = url.href;
+  const address = new URL(location.href);
+  address.searchParams.set('addon', addon.id);
+  address.searchParams.delete('list'); address.searchParams.delete('manage');
+  if (item) address.searchParams.set('list', item.ref);
+  if (manage) address.searchParams.set('manage', '1');
+  history.replaceState(null, '', address);
+  closeDrawer(); render();
+}
+function renderInstalledAddons() {
+  const opened = new Map([...els.installedAddonLinks.querySelectorAll('details')].map(group => [group.dataset.addonId, group.open]));
+  els.installedAddonLinks.replaceChildren();
+  for (const addon of installedAddons) {
+    const group = document.createElement('details'); group.className = 'checklist-folder'; group.dataset.addonId = addon.id;
+    group.open = opened.get(addon.id) ?? true;
+    const heading = document.createElement('summary');
+    heading.className = 'folder-tab-heading' + (activeAddon?.id === addon.id ? ' active' : '');
+    const arrow = document.createElement('span'); arrow.className = 'folder-disclosure'; arrow.textContent = '\u25b8'; arrow.setAttribute('aria-hidden', 'true');
+    const label = document.createElement('span'); label.className = 'folder-tab-label'; label.textContent = addon.name.slice(0, 120);
+    heading.append(arrow, label); group.append(heading);
+    const contents = document.createElement('div'); contents.className = 'folder-tab-contents';
+    const addButton = (name, item, manage) => {
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'tab addon-link';
+      button.textContent = name.slice(0, 120); button.disabled = state.ui.syncInProgress;
+      const selected = activeAddon?.id === addon.id && activeAddon.ref === (item?.ref || '') && activeAddon.manage === manage;
+      button.classList.toggle('active', selected); button.setAttribute('aria-current', String(selected));
+      if (item) button.dataset.listRef = item.ref;
+      button.onclick = () => void openInstalledAddon(addon, item, manage);
+      contents.append(button);
+    };
+    for (const item of addon.items) addButton(item.name, item, false);
+    if (addon.canManage) addButton('Manage ' + addon.name.toLowerCase() + ' lists', null, true);
+    else if (!addon.items.length) {
+      const hint = document.createElement('div'); hint.className = 'hint'; hint.textContent = 'No lists assigned. Ask your admin to add you.'; contents.append(hint);
+    }
+    group.append(contents); els.installedAddonLinks.append(group);
+  }
+}
+window.addEventListener('message', event => {
+  if (event.origin !== location.origin || event.source !== els.addonFrame.contentWindow || !activeAddon) return;
+  if (event.data?.type === 'checky-addon-lists-changed') void loadInstalledAddons();
+  if (event.data?.type === 'checky-addon-selected-list' && /^[a-z_]+:[a-z0-9]{15}$/.test(event.data.ref)) {
+    activeAddon.ref = event.data.ref; activeAddon.manage = false;
+    const address = new URL(location.href);
+    address.searchParams.set('list', activeAddon.ref); address.searchParams.delete('manage');
+    history.replaceState(null, '', address); renderInstalledAddons();
+  }
+});
 
 function renderSettings() {
   const activeTab = state.data.tabs[state.data.active];
@@ -1436,11 +1514,15 @@ function renderSettings() {
   els.doneToggle.classList.toggle("btn-ghost", !state.ui.doneViewOpen || !state.settings.showDoneTab);
   els.settingsToggle.classList.toggle("btn-primary", state.ui.settingsViewOpen);
   els.settingsToggle.classList.toggle("btn-ghost", !state.ui.settingsViewOpen);
-  els.specialViewHeader.classList.toggle("hidden", !isSpecialViewOpen());
+  els.specialViewHeader.classList.toggle("hidden", !state.ui.settingsViewOpen && !state.ui.doneViewOpen);
+  els.addonView.classList.toggle("hidden", !activeAddon);
+  document.body.classList.toggle("addon-open", !!activeAddon);
+  els.list.classList.toggle("hidden", !!activeAddon);
+  els.addItemBtn.parentElement.classList.toggle("hidden", !!activeAddon);
   els.specialViewTitle.textContent = specialViewTitle;
   els.settingsPanel.classList.toggle("hidden", !state.ui.settingsViewOpen);
   els.currentViewTitle.parentElement.classList.toggle("hidden", isSpecialViewOpen());
-  els.mainDivider.classList.toggle("hidden", state.ui.settingsViewOpen);
+  els.mainDivider.classList.toggle("hidden", state.ui.settingsViewOpen || !!activeAddon);
   els.addItemBtn.classList.toggle("hidden", isSpecialViewOpen());
 }
 
@@ -1457,7 +1539,7 @@ function renderTabs() {
   els.tabs.innerHTML = "";
   getVisibleTabs().forEach(({ tab, index }) => {
     const container = document.createElement("div");
-    container.className = `tab${index === state.data.active ? " active" : ""}`;
+    container.className = `tab${!activeAddon && index === state.data.active ? " active" : ""}`;
     container.dataset.tabIndex = String(index);
 
     if (state.ui.editingTabIndex === index) {
@@ -1756,7 +1838,7 @@ function renderItems() {
   els.list.innerHTML = "";
   els.doneArchiveTools.classList.toggle("hidden", !state.ui.doneViewOpen || !state.settings.showDoneTab);
 
-  if (state.ui.settingsViewOpen) {
+  if (state.ui.settingsViewOpen || activeAddon) {
     return;
   }
 
@@ -1968,6 +2050,9 @@ async function editItemReminder(tabId, itemId) {
 }
 
 async function prepareForAppUpdate() {
+  if (activeAddon && els.addonFrame.contentWindow?.checkyAddonBusy?.()) {
+    throw new Error('Finish the open list edit before updating Checky.');
+  }
   if (state.ui.syncInProgress || state.ui.loginBusy || state.ui.availableChecklistsLoading) {
     throw new Error('Wait for the current sync or sign-in to finish, then choose Update now.');
   }
@@ -2069,6 +2154,11 @@ function bindEvents() {
     closeDrawer();
   };
 
+  for (const tabs of [els.checklistTabPanel, els.alwaysVisibleTabs]) tabs.addEventListener('click', event => {
+    if (!activeAddon) return;
+    if (!leaveInstalledAddon()) { event.preventDefault(); event.stopImmediatePropagation(); return; }
+    renderSettings(); renderItems();
+  }, true);
   els.settingsToggle.onclick = () => {
     openSettingsView();
   };
@@ -2082,6 +2172,8 @@ function bindEvents() {
   };
 
   els.addTabBtn.onclick = () => {
+    if (!leaveInstalledAddon()) return;
+    state.ui.settingsViewOpen = false; state.ui.doneViewOpen = false;
     const insertIndex = getDoneTabIndex() === -1 ? state.data.tabs.length : getDoneTabIndex();
     state.data.tabs.splice(insertIndex, 0, { name: `Tab ${getVisibleTabs().length + 1}`, items: [] });
     state.data.tabs[insertIndex].id = createEntityId("tab");
@@ -2186,7 +2278,7 @@ function bindEvents() {
   };
 
   els.refreshChecklistsBtn.onclick = async () => {
-    await loadAvailableChecklists();
+    await Promise.all([loadAvailableChecklists(), loadInstalledAddons()]);
   };
 
   els.doneSearchInput.oninput = () => {

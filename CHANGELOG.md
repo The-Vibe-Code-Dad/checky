@@ -321,6 +321,12 @@ base:
 - Kept the full date in accessible Edit labels and timestamp tooltips. Changing an entry's date moves it to the matching day; loading earlier entries continues existing day groups.
 - Verified local midnight/month/year boundaries, date edits, reloads, pagination and phone layout against real PocketBase in Chromium. Existing tracker integration and web build/cache checks passed.
 
+## v0064 - 2026-11-05
+- Integrated the optional Baby tracker into the main Checky screen. Baby appears beside Personal and Shared; selecting its lists keeps the normal navigation available, restores the selection on reload and guards unfinished entries when switching views or updating the app.
+- Added admin controls to create/rename baby lists and assign or remove existing Checky users. Baby access is independent of ordinary checklist ownership/sharing and is enforced on every backend request; regular users cannot grant themselves access.
+- Migrated earlier baby logs into separate `checky_baby_lists`, preserving entry IDs, timestamps, versions and content. Existing logs remain visible to the admin, who explicitly assigns caregivers; ordinary checklist deletions no longer delete baby logs.
+- Verified upgrades, permissions, revocation, membership conflicts, integrated admin/caregiver workflows, phone layout and retained day grouping with real PocketBase/Chromium. Web update/Done regressions, build/auth unit checks and actual Caddy framing-header checks passed.
+
 desktop:
 
 ## v0001 - 2026-04-07
@@ -590,3 +596,6 @@ pocketbase:
 ## v0038 - 2026-11-05
 - Removed Baby tracker code/migration from the default standalone backend. The separately installed Base add-on package can extend that backend image while reusing its current database and accounts.
 - Documented that removing extension code retains existing log records, and that a full database backup includes add-on data.
+
+## v0039 - 2026-11-05
+- Updated standalone backend add-on guidance for independent, admin-assigned baby lists and the migration of existing logs. The standard standalone backend still excludes Baby tracker code; optional installs retain the same database and accounts.

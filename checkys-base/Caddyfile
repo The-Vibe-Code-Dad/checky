@@ -34,10 +34,19 @@
       header @desktopUpdateFile Content-Disposition "attachment"
 
       header {
-        X-Frame-Options "DENY"
-        Content-Security-Policy "frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
         X-Content-Type-Options "nosniff"
         Referrer-Policy "strict-origin-when-cross-origin"
+      }
+      @mainPages not path /baby/ /baby/*
+      header @mainPages {
+        X-Frame-Options "DENY"
+        Content-Security-Policy "frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+      }
+      # Only the installed add-on may be embedded inside the same Checky origin.
+      @embeddedAddon path /baby/ /baby/*
+      header @embeddedAddon {
+        X-Frame-Options "SAMEORIGIN"
+        Content-Security-Policy "frame-ancestors 'self'; object-src 'none'; base-uri 'self'"
       }
       root * /srv
       file_server

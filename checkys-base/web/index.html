@@ -7,7 +7,7 @@
   <link rel="apple-touch-icon" href="./icon-192.png">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https: http:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-src 'none'; frame-ancestors 'none';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https: http:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-src 'self'; frame-ancestors 'none';">
   <meta name="theme-color" content="#1f1f1f">
   <title>Checky's List</title>
   <link rel="icon" type="image/png" href="./logo.png">
@@ -51,14 +51,14 @@
       <div class="nav-section">
         <div id="checklistNavigation" class="checklist-navigation">
           <div class="tab-navigation-header">
-            <span>Tabs</span>
+            <span>Lists</span>
             <button id="refreshChecklistsBtn" class="btn btn-ghost" type="button" title="Refresh checklists" aria-label="Refresh checklists">&#10227;</button>
           </div>
           <div id="alwaysVisibleTabs" class="tabs nav-tabs always-visible-tabs" role="group" aria-label="Always shown tabs"></div>
           <div id="checklistFolders" class="tab-folders"></div>
+          <div id="installedAddonLinks" class="tab-folders installed-addon-links"></div>
           <div id="checklistTabPanel" class="checklist-tab-panel">
             <div class="tabs nav-tabs" id="tabs"></div>
-            <div id="installedAddonLinks" class="installed-addon-links"></div>
             <div class="row-actions">
               <button class="btn btn-primary nav-add-tab" id="addTabBtn">+ Tab</button>
             </div>
@@ -70,6 +70,9 @@
     </aside>
 
     <div class="content-scroll" id="contentScroll">
+      <section id="addonView" class="addon-view hidden" aria-label="Selected list">
+        <iframe id="addonFrame" title="Selected list"></iframe>
+      </section>
       <div id="pullSyncIndicator" class="pull-sync-indicator" aria-hidden="true">
         <div id="pullSyncLabel" class="pull-sync-label">Pull down to sync</div>
       </div>

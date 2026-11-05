@@ -2,7 +2,7 @@
 
 Baby tracker is a **separately installed extension** of Checky Base. The normal web/PocketBase images, including the `latestwapp` app-hosting option, contain no tracker UI, API hooks or database migration. The optional images add those files to the existing services, following the app-hosting image-variant pattern.
 
-It uses the **same PocketBase database, accounts, sessions and personal/shared checklist permissions**. There is no second database, account system, public port or separately running Base installation. Installing it adds `checky_baby_entries` to the current database. Baby tracker appears automatically under the current list's tabs when both its web files and backend extension are installed; there is no built-in Settings switch that installs it.
+It uses the **same PocketBase database, accounts and sessions**, with independent baby-list membership controlled by the Checky admin. It adds `checky_baby_lists` and `checky_baby_entries` to the current database. **Baby** appears beside **Personal** and **Shared** in the normal navigation when both add-on packages are installed. Selecting a baby list opens its log inside the Checky screen; the same navigation switches to other lists without a Back to lists step. The tracker remains a separately installed package, not part of the standard images.
 
 ## CasaOS installation
 
@@ -23,7 +23,7 @@ For an **existing CasaOS Checky installation**:
 2. Edit that existing app's web image tag to `latestbaby`, or `latestwappbaby` if you also want Windows app hosting.
 3. Edit its PocketBase image tag to `latestbaby`.
 4. Keep the same data-folder mapping, network, ports and public-origin settings. Pull the selected images and recreate both services.
-5. Reopen Checky, apply any available Base web update, and open **Baby tracker** from the current list's navigation. Your accounts and lists stay in the same database.
+5. Reopen Checky, apply any available Base web update, and open **Baby** in navigation. As the admin, choose **Manage baby lists** to create lists and assign caregivers. Your accounts and lists stay in the same database.
 
 Do not install a second Base instance or choose a new empty data folder to add this to an existing installation.
 
@@ -37,11 +37,15 @@ To update an installed add-on, update both optional images together. Updating to
 
 ## Tracking and sharing
 
-The log at `/baby/` groups entries under month and day headings like the Done tab, with the newest days and times first. Dates use this device's local time; editing an entry's date moves it to the matching day. The log refreshes every 30 seconds while no entry form is open. Add entry fills in the current date/time, which can be edited. Entries have breast milk and formula amounts, feeding notes, and separate pee/poop checkboxes with notes. Display amounts in ml or **US fluid ounces**; stored ml values retain their precision when switching units.
+The integrated baby log groups entries under month and day headings like the Done tab, with the newest days and times first. Dates use this device's local time; editing an entry's date moves it to the matching day. The log refreshes every 30 seconds while no entry form is open. Add entry fills in the current date/time, which can be edited. Entries have breast milk and formula amounts, feeding notes, and separate pee/poop checkboxes with notes. Display amounts in ml or **US fluid ounces**; stored ml values retain their precision when switching units.
 
-Choose the current personal/shared list in the tracker. Shared caregivers use Base's existing owner/member access. Separate additions do not replace one another; editing/deleting an entry uses its current version to reject conflicting edits. Saving needs a connection, and a failed save retains the open form. The add-on's assets are versioned independently and are not downloaded into the standard Base offline cache.
+The admin opens **Baby → Manage baby lists**, chooses **+ New baby list**, enters a name, selects existing Checky users, and saves. To rename a list or add/remove caregivers, reopen Manage baby lists and select it. Assigned caregivers can view, add, edit and delete entries. Only the Checky admin can manage membership; ordinary Shared checklist membership and ownership never grant baby-list access. The admin can see all baby lists to manage them. Users without an assignment see “No lists assigned”.
 
-Baby entries live outside checklist JSON in the same database. Ordinary checklist edits, old desktop clients and checklist JSON imports/resets do not replace them. Deleting the parent checklist deletes its log. Checklist JSON exports and checklist-JSON storage quotas do not include add-on records; full PocketBase data-directory backups do. The tracker UI runs in Base; the desktop app continues its existing checklist sync.
+Separate additions do not replace one another; editing/deleting an entry uses its current version to reject conflicting edits. Membership edits also reject stale versions. Saving needs a connection, and a failed save retains the open form. Switching to another list prompts before discarding an unfinished entry or membership edit. The add-on's assets are versioned independently and are not downloaded into the standard Base offline cache.
+
+When upgrading an earlier Baby tracker installation, its existing logs are moved into independent baby lists, preserving entry IDs, timestamps, versions and notes. **The admin must assign caregivers to the migrated lists**; permissions are deliberately not copied from Personal/Shared checklists. The admin can find and rename those lists under Baby → Manage baby lists. Removing ordinary checklist sharing or deleting an ordinary checklist does not change these baby logs.
+
+Baby lists and entries live outside checklist JSON in the same database. Ordinary checklist edits, old desktop clients and checklist JSON imports/resets do not replace them. Checklist JSON exports and checklist-JSON storage quotas do not include add-on records; full PocketBase data-directory backups do. The tracker UI runs in Base; the desktop app continues its existing checklist sync. Direct `/baby/` links remain available, but the normal workflow uses the integrated Checky navigation.
 
 ## Building from local source
 

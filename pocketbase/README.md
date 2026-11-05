@@ -54,7 +54,7 @@ Each shared checklist record stores:
 
 ## Separately installed Baby tracker
 
-The standard backend does not install Baby tracker hooks or its collection. The extension is maintained in [`checkys-base/addons/baby-tracker`](../checkys-base/addons/baby-tracker/README.md) and can be added with its optional PocketBase image, retaining the **existing data directory and accounts**. It adds `checky_baby_entries` to that same database and checks existing personal/shared permissions on every request. Returning to a standard image removes the extension code without deleting saved entries. Full PocketBase data-directory backups include those entries; ordinary checklist JSON exports do not.
+The standard backend does not install Baby tracker hooks or its collection. The extension is maintained in [`checkys-base/addons/baby-tracker`](../checkys-base/addons/baby-tracker/README.md) and can be added with its optional PocketBase image, retaining the **existing data directory and accounts**. It adds `checky_baby_lists` and `checky_baby_entries` to that same database and checks independent admin-assigned membership on every request. The Checky app admin creates baby lists and assigns caregivers; ordinary personal/shared checklist permissions do not grant baby access. Existing logs migrate without losing entries, and the admin must assign their caregivers. Returning to a standard image removes the extension code without deleting saved entries. Full PocketBase data-directory backups include those entries; ordinary checklist JSON exports do not.
 
 ## How Sharing Works
 

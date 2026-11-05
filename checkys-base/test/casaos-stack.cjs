@@ -50,7 +50,9 @@ const compose = args => docker(['compose', '-p', project, '-f', file, ...args]);
     const url = 'http://' + compose(['port', 'web', '80']).trim();
     const request = (route, options={}) => fetch(url + route, {signal:AbortSignal.timeout(10000), ...options});
     const post = (route, body) => request(route, {method:'POST', headers:{'Content-Type':'application/json', Origin:url}, body:JSON.stringify(body)});
-    assert.equal((await request('/')).status, 200);
+    const mainPage = await request('/');
+    assert.equal(mainPage.status, 200);
+    assert.equal(mainPage.headers.get('x-frame-options'), 'DENY');
     const buildResponse = await request('/version.json');
     assert.match(buildResponse.headers.get('cache-control'), /no-cache/);
     const build = (await buildResponse.json()).version;
@@ -64,7 +66,11 @@ const compose = args => docker(['compose', '-p', project, '-f', file, ...args]);
     assert.equal(addonManifest.some(item => item.id === 'baby-tracker'), withBaby);
     const babyPage = await request('/baby/');
     assert.equal(babyPage.status, withBaby ? 200 : 404);
-    if (withBaby) assert.ok(!(await babyPage.text()).includes('__CHECKY_BUILD__'));
+    if (withBaby) {
+      assert.ok(!(await babyPage.text()).includes('__CHECKY_BUILD__'));
+      assert.equal(babyPage.headers.get('x-frame-options'), 'SAMEORIGIN');
+      assert.match(babyPage.headers.get('content-security-policy'), /frame-ancestors 'self'/);
+    }
     const updateResponse = await request('/desktop-updates/latest.json');
     if (process.env.CHECKY_TEST_WITH_APP === 'true') {
       assert.equal(updateResponse.status, 200);
@@ -99,6 +105,7 @@ const compose = args => docker(['compose', '-p', project, '-f', file, ...args]);
     const superAuth = await post('/api/collections/_superusers/auth-with-password', {identity:email, password});
     assert.equal(superAuth.status, 200);
     const superToken = (await superAuth.json()).token;
+    assert.equal((await request('/api/collections/checky_baby_lists/records', {headers:{Authorization:superToken}})).status, withBaby ? 200 : 404);
     assert.equal((await request('/api/collections/checky_baby_entries/records', {headers:{Authorization:superToken}})).status, withBaby ? 200 : 404);
     assert.equal((await request('/api/checkys-base/baby/status', {headers:{Cookie:cookie}})).status, withBaby ? 200 : 404);
     assert.equal((await post('/api/checkys-base/first-user', {email, password, passwordConfirm:password})).status, 403);

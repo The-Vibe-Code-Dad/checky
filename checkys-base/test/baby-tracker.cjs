@@ -48,10 +48,12 @@ async function main() {
       await fs.cp(path.join(__dirname, '../pocketbase', folder), path.join(dir, 'backend', folder), { recursive: true });
       await fs.cp(path.join(addon, 'pocketbase', folder), path.join(dir, 'backend', folder), { recursive: true });
     }
+    await fs.rm(path.join(dir, 'backend/pb_migrations/202611050002_checky_baby_lists.js'));
     await startBackend(false);
     await req('/api/checkys-base/first-user', 'POST', { email: 'admin@baby.invalid', password, passwordConfirm: password });
     const admin = await req('/api/collections/_superusers/auth-with-password', 'POST', { identity: 'admin@baby.invalid', password });
     await req('/api/checkys-base/baby/status', 'GET', undefined, admin.token, 404);
+    await req('/api/collections/checky_baby_lists/records', 'GET', undefined, admin.token, 404);
     await req('/api/collections/checky_baby_entries/records', 'GET', undefined, admin.token, 404);
     console.log('PASS standard backend has no Baby tracker routes or collection');
     await stopBackend(); await startBackend(true);
@@ -63,11 +65,48 @@ async function main() {
     }
     const shared = await req('/api/collections/shared_checklists/records', 'POST', { owner: users[0].id, sharedWith: [users[1].id], shareKey: 'baby-shared', name: 'Baby log', version: 1, data: { active: 0, tabs: [{ name: 'Shopping', items: [{ text: 'Keep regular tasks', done: false }] }] } }, admin.token);
     for (const user of users.slice(0, 2)) await req('/api/collections/users/records/' + user.id, 'PATCH', { assignedSharedChecklist: shared.id }, admin.token);
-    const ref = 'shared_checklists:' + shared.id, endpoint = '/api/checkys-base/baby/entries';
-    await req('/api/checkys-base/baby/lists', 'GET', undefined, undefined, 401);
-    const available = await req('/api/checkys-base/baby/lists', 'GET', undefined, tokens[1]);
-    assert.ok(available.items.some(item => item.ref === ref && item.writable));
-    assert.equal(available.preferred, ref);
+    const adminUser = await req('/api/collections/users/auth-with-password', 'POST', { identity: 'admin@baby.invalid', password });
+    // Simulate a previously installed tracker. Upgrading preserves entry IDs,
+    // versions and data but does not inherit access from ordinary checklists.
+    const legacy = await req('/api/collections/checky_baby_entries/records', 'POST', {
+      sharedChecklist: shared.id, createdBy: users[0].id, requestId: 'legacy-request-00000001', occurredAt: seed.occurredAt, data: seed, version: 7
+    }, admin.token);
+    const legacyPersonal = await req('/api/collections/checky_baby_entries/records', 'POST', {
+      personalChecklist: users[0].defaultChecklist, createdBy: users[0].id, requestId: 'legacy-request-00000002', occurredAt: seed.occurredAt, data: seed, version: 3
+    }, admin.token);
+    await stopBackend();
+    await fs.copyFile(path.join(addon, 'pocketbase/pb_migrations/202611050002_checky_baby_lists.js'), path.join(dir, 'backend/pb_migrations/202611050002_checky_baby_lists.js'));
+    await startBackend(true);
+    const endpoint = '/api/checkys-base/baby/entries', listEndpoint = '/api/checkys-base/baby/lists';
+    await req(listEndpoint, 'GET', undefined, undefined, 401);
+    assert.deepEqual((await req(listEndpoint, 'GET', undefined, tokens[0])).items, []);
+    const migratedLists = await req(listEndpoint, 'GET', undefined, adminUser.token);
+    assert.equal(migratedLists.canManage, true); assert.equal(migratedLists.items.length, 2);
+    const babyList = migratedLists.items.find(item => item.name === 'Baby · Baby log');
+    assert.deepEqual(babyList.members, []);
+    const ref = babyList.ref;
+    const migrated = (await req(endpoint + '?list=' + ref, 'GET', undefined, adminUser.token)).items[0];
+    assert.equal(migrated.id, legacy.id); assert.equal(migrated.version, 7); assert.deepEqual(migrated.entry, seed);
+    await req(endpoint + '?list=' + ref, 'GET', undefined, tokens[1], 404);
+    for (const token of tokens) {
+      await req(listEndpoint, 'POST', {name:'Self assigned', members:[users[0].id]}, token, 403);
+      await req(listEndpoint + '/' + ref.split(':')[1], 'PATCH', {version:1,name:'Self assigned',members:[users[0].id]}, token, 403);
+      await req('/api/checkys-base/baby/admin/users', 'GET', undefined, token, 403);
+      await req('/api/collections/checky_baby_lists/records', 'POST', {name:'Bypass',members:[users[0].id],version:1}, token, 403);
+      await req('/api/collections/checky_baby_lists/records/' + ref.split(':')[1], 'PATCH', {members:[users[0].id]}, token, 403);
+    }
+    await req(listEndpoint, 'POST', {name:'Forged origin',members:[]}, adminUser.token, 403, {Origin:'https://forged.invalid'});
+    await req(listEndpoint, 'POST', {name:'Invalid member',members:['not-a-user']}, adminUser.token, 400);
+    const membership = await req(listEndpoint + '/' + ref.split(':')[1], 'PATCH', {version:1,name:'Family baby log',members:[users[0].id,users[1].id]}, adminUser.token);
+    await req(listEndpoint + '/' + ref.split(':')[1], 'PATCH', {version:1,name:'Stale',members:[]}, adminUser.token, 409);
+    assert.equal(membership.version,2);
+    assert.equal((await req(listEndpoint,'GET',undefined,tokens[1])).items[0].ref,ref);
+    assert.equal((await req(listEndpoint,'GET',undefined,tokens[1])).canManage,false);
+    await req(endpoint + '/' + legacy.id, 'DELETE', {version:7}, tokens[0]);
+    const personalMigrated = await req('/api/collections/checky_baby_entries/records/' + legacyPersonal.id, 'GET', undefined, admin.token);
+    assert.ok(personalMigrated.babyList); assert.equal(personalMigrated.personalChecklist, undefined);
+    assert.equal(personalMigrated.version,3); assert.deepEqual(personalMigrated.data,seed);
+    console.log('PASS independent baby lists, preserved upgrade data, explicit admin assignment, locked collection APIs and membership conflict protection');
     const created = await req(endpoint, 'POST', { list: ref, requestId: 'unique-create-request-0001', entry: seed }, tokens[0]);
     const retried = await req(endpoint, 'POST', { list: ref, requestId: 'unique-create-request-0001', entry: seed }, tokens[0]);
     assert.equal(retried.id, created.id, 'Retry after a lost response must not duplicate an entry');
@@ -89,7 +128,7 @@ async function main() {
       await req(endpoint, 'POST', { list: ref, requestId: crypto.randomUUID(), entry }, tokens[0], 400);
     }
     await req(endpoint, 'POST', { list: ref, requestId: crypto.randomUUID(), entry: seed }, tokens[0], 403, { Origin: 'https://forged.invalid' });
-    const personal = 'checklists:' + users[0].defaultChecklist;
+    const personal = (await req(listEndpoint, 'POST', {name:'Separate baby list',members:[users[0].id]}, adminUser.token)).ref;
     const privateEntry = await req(endpoint, 'POST', { list: personal, requestId: crypto.randomUUID(), entry: seed }, tokens[0]);
     await req(endpoint + '?list=' + personal, 'GET', undefined, tokens[1], 404);
     // Same timestamps still paginate without gaps or duplicates.
@@ -101,7 +140,7 @@ async function main() {
     await req(endpoint + '?list=' + ref + '&before=' + privateEntry.id, 'GET', undefined, tokens[1], 400);
     const parent = await req('/api/collections/shared_checklists/records/' + shared.id, 'GET', undefined, admin.token);
     assert.equal(parent.data.tabs[0].items[0].text, 'Keep regular tasks'); assert.equal(parent.version, 1);
-    console.log('PASS shared/personal access, validation, idempotent saves, conflict protection, stable pagination and unchanged checklist JSON');
+    console.log('PASS independent list access, validation, idempotent saves, conflict protection, stable pagination and unchanged checklist JSON');
 
     const root = path.join(dir, 'web');
     await fs.cp(path.join(__dirname, '../web'), root, { recursive: true, filter: source => path.basename(source) !== 'desktop-updates' });
@@ -123,7 +162,7 @@ async function main() {
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     const origin = 'http://127.0.0.1:' + server.address().port;
     browser = await chromium.launch({ executablePath: process.env.CHECKY_CHROMIUM_EXECUTABLE || undefined, headless: true, args: ['--no-sandbox'], downloadsPath: path.join(dir, 'downloads') });
-    const context = await browser.newContext({ viewport: { width: 1100, height: 900 }, timezoneId: 'America/New_York' });
+    const context = await browser.newContext({ viewport: { width: 1100, height: 900 }, timezoneId: 'America/New_York', locale: 'en-US' });
     await context.addInitScript(() => Object.defineProperty(crypto, 'randomUUID', { value: undefined }));
     const page = await context.newPage(), errors = []; page.on('pageerror', error => errors.push(error.message));
     await page.goto(origin);
@@ -138,62 +177,126 @@ async function main() {
     await buildAddon(path.join(root, 'baby'));
     await fs.copyFile(path.join(addon, 'addons.json'), path.join(root, 'addons.json'));
     await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
-    await page.locator('[data-addon-id="baby-tracker"]').click();
-    await page.waitForURL('**/baby/**'); await page.locator('.entry').first().waitFor();
-    assert.equal(await page.locator('#listPicker').inputValue(), ref);
-    await page.locator('#addEntry').click();
-    assert.equal(await page.locator('#occurredAt').inputValue().then(value => value.length), 16);
-    await page.locator('#saveEntry').click(); assert.match(await page.locator('#editorError').textContent(), /Add a feeding/);
-    await page.locator('#occurredAt').fill('2026-11-05T10:15');
-    await page.locator('#breastMilk').fill('60'); await page.locator('#formula').fill('30');
-    await page.locator('#entryUnits').selectOption('oz');
-    assert.equal(await page.locator('#breastMilk').inputValue(), amounts.fromMl(60, 'oz'));
-    for (let i = 0; i < 3; i++) { await page.locator('#entryUnits').selectOption('ml'); await page.locator('#entryUnits').selectOption('oz'); }
-    await page.locator('#feedingNotes').fill('Fed after nap\nSettled well <script>bad()</script>');
-    await page.locator('#pee').check(); await page.locator('#peeNotes').fill('Wet'); await page.locator('#poopNotes').fill('No poop yet');
+    const babyFolder = page.locator('[data-addon-id="baby-tracker"]');
+    await babyFolder.getByRole('button', {name:'Family baby log',exact:true}).click();
+    const tracker = page.frameLocator('#addonFrame');
+    await tracker.locator('.entry').first().waitFor();
+    assert.equal(new URL(page.url()).pathname, '/');
+    assert.equal(await tracker.getByRole('link', {name:'Back to lists'}).count(), 0);
+    assert.equal(await tracker.locator('#listPicker').inputValue(), ref);
+    assert.equal(await tracker.locator('#manageLists').isVisible(), false);
+    await tracker.locator('#addEntry').click();
+    assert.equal(await tracker.locator('#occurredAt').inputValue().then(value => value.length), 16);
+    await tracker.locator('#saveEntry').click(); assert.match(await tracker.locator('#editorError').textContent(), /Add a feeding/);
+    assert.match(await page.evaluate(() => window.checkyPrepareForUpdate().then(() => 'unexpected', error => error.message)), /Finish the open list edit/);
+    await tracker.locator('#occurredAt').fill('2026-11-05T10:15');
+    await tracker.locator('#breastMilk').fill('60'); await tracker.locator('#formula').fill('30');
+    await tracker.locator('#entryUnits').selectOption('oz');
+    assert.equal(await tracker.locator('#breastMilk').inputValue(), amounts.fromMl(60, 'oz'));
+    for (let i = 0; i < 3; i++) { await tracker.locator('#entryUnits').selectOption('ml'); await tracker.locator('#entryUnits').selectOption('oz'); }
+    await tracker.locator('#feedingNotes').fill('Fed after nap\nSettled well <script>bad()</script>');
+    await tracker.locator('#pee').check(); await tracker.locator('#peeNotes').fill('Wet'); await tracker.locator('#poopNotes').fill('No poop yet');
     if (process.env.CHECKY_SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.CHECKY_SCREENSHOT_DIR, 'baby-desktop-editor.png') });
-    await page.locator('#saveEntry').click(); await page.locator('#editor').waitFor({ state: 'hidden' });
+    await tracker.locator('#saveEntry').click(); await tracker.locator('#editor').waitFor({ state: 'hidden' });
     let saved = (await req(endpoint + '?list=' + ref, 'GET', undefined, tokens[1])).items.find(item => item.entry.feedingNotes.startsWith('Fed after nap'));
     assert.ok(saved); assert.equal(saved.entry.occurredAt, '2026-11-05T15:15:00.000Z'); assert.equal(saved.entry.breastMilkMl, 60); assert.equal(saved.entry.formulaMl, 30);
-    await page.reload(); await page.locator('.entry').first().waitFor();
-    assert.match(await page.locator('#entries').textContent(), /Settled well <script>bad\(\)<\/script>/);
-    await page.locator('#units').selectOption('oz');
-    await page.locator('.entry').first().getByRole('button', { name: /Edit entry/ }).click();
-    await page.locator('#formula').fill('2'); await page.locator('#poop').check(); await page.locator('#poopNotes').fill('Changed diaper');
-    await page.locator('#occurredAt').fill('2026-11-05T10:20');
+    await page.reload(); await tracker.locator('.entry').first().waitFor();
+    assert.match(await tracker.locator('#entries').textContent(), /Settled well <script>bad\(\)<\/script>/);
+    assert.deepEqual(await tracker.locator('.archive-month').allTextContents(), ['November 2026']);
+    assert.deepEqual(await tracker.locator('.archive-day').allTextContents(), ['Thursday, November 5']);
+    await tracker.locator('#units').selectOption('oz');
+    await tracker.locator('.entry').first().getByRole('button', { name: /Edit entry/ }).click();
+    await tracker.locator('#formula').fill('2'); await tracker.locator('#poop').check(); await tracker.locator('#poopNotes').fill('Changed diaper');
+    await tracker.locator('#occurredAt').fill('2026-11-05T10:20');
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-    assert.equal(await page.locator('#editor').evaluate(el => el.scrollWidth <= el.clientWidth), true);
+    assert.equal(await tracker.locator('#editor').evaluate(el => el.scrollWidth <= el.clientWidth), true);
     if (process.env.CHECKY_SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.CHECKY_SCREENSHOT_DIR, 'baby-phone-editor.png') });
-    await page.locator('#saveEntry').click(); await page.locator('#editor').waitFor({ state: 'hidden' });
+    await tracker.locator('#saveEntry').click(); await tracker.locator('#editor').waitFor({ state: 'hidden' });
     saved = (await req(endpoint + '?list=' + ref, 'GET', undefined, tokens[1])).items.find(item => item.id === saved.id);
     assert.equal(saved.entry.formulaMl, amounts.toMl(2, 'oz')); assert.equal(saved.entry.poop, true); assert.equal(saved.entry.occurredAt, '2026-11-05T15:20:00.000Z');
-    if (process.env.CHECKY_SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.CHECKY_SCREENSHOT_DIR, 'baby-phone-list.png') });
+    if (process.env.CHECKY_SCREENSHOT_DIR) {
+      await page.screenshot({ path: path.join(process.env.CHECKY_SCREENSHOT_DIR, 'baby-phone-list.png') });
+      await page.locator('#navToggle').click();
+      await page.waitForFunction(() => !state.ui.availableChecklistsLoading);
+      await page.screenshot({ path: path.join(process.env.CHECKY_SCREENSHOT_DIR, 'baby-navigation-phone.png') });
+      await page.locator('#navCloseBtn').click();
+    }
     // Concurrent edit is rejected while the original user's draft stays open.
-    await page.locator('.entry').first().getByRole('button', { name: /Edit entry/ }).click();
-    await page.locator('#feedingNotes').fill('My unsaved draft');
+    await tracker.locator('.entry').first().getByRole('button', { name: /Edit entry/ }).click();
+    await tracker.locator('#feedingNotes').fill('My unsaved draft');
     await req(endpoint + '/' + saved.id, 'PATCH', { version: saved.version, entry: { ...saved.entry, feedingNotes: 'Other caregiver edit' } }, tokens[1]);
-    await page.locator('#saveEntry').click(); await page.getByText('Another caregiver changed this entry.', { exact: false }).waitFor();
-    assert.equal(await page.locator('#feedingNotes').inputValue(), 'My unsaved draft');
-    page.once('dialog', dialog => dialog.accept()); await page.locator('#cancel').click();
-    await page.locator('#refresh').click(); await page.getByText('Other caregiver edit', { exact: true }).waitFor();
+    await tracker.locator('#saveEntry').click(); await tracker.getByText('Another caregiver changed this entry.', { exact: false }).waitFor();
+    assert.equal(await tracker.locator('#feedingNotes').inputValue(), 'My unsaved draft');
+    page.once('dialog', dialog => dialog.accept()); await tracker.locator('#cancel').click();
+    await tracker.locator('#refresh').click(); await tracker.getByText('Other caregiver edit', { exact: true }).waitFor();
     // Offline save leaves the form intact and never reports success.
-    await page.locator('#addEntry').click(); await page.locator('#pee').check();
-    await context.setOffline(true); await page.locator('#saveEntry').click();
-    await page.getByText('Cannot reach Checky Base.', { exact: false }).waitFor();
-    assert.equal(await page.locator('#pee').isChecked(), true);
-    await context.setOffline(false); page.once('dialog', dialog => dialog.accept()); await page.locator('#cancel').click();
+    await tracker.locator('#addEntry').click(); await tracker.locator('#pee').check();
+    await context.setOffline(true); await tracker.locator('#saveEntry').click();
+    await tracker.getByText('Cannot reach Checky Base.', { exact: false }).waitFor();
+    assert.equal(await tracker.locator('#pee').isChecked(), true);
+    await context.setOffline(false); page.once('dialog', dialog => dialog.accept()); await tracker.locator('#cancel').click();
     // Delete is explicit and persists after reloading.
-    await page.locator('.entry').first().getByRole('button', { name: /Edit entry/ }).click();
-    await page.locator('#deleteEntry').click(); await page.getByRole('button', { name: 'Confirm delete', exact: true }).click();
-    await page.locator('#editor').waitFor({ state: 'hidden' });
+    await tracker.locator('.entry').first().getByRole('button', { name: /Edit entry/ }).click();
+    await tracker.locator('#deleteEntry').click(); await tracker.getByRole('button', { name: 'Confirm delete', exact: true }).click();
+    await tracker.locator('#editor').waitFor({ state: 'hidden' });
     assert.ok(!(await req(endpoint + '?list=' + ref, 'GET', undefined, tokens[1])).items.some(item => item.id === saved.id));
-    await page.getByRole('link', { name: 'Back to lists' }).click(); await page.waitForURL(origin + '/');
+    // The same navigation switches between Baby and ordinary lists, preserving
+    // drafts when a caregiver declines to leave an unfinished entry.
+    await tracker.locator('#addEntry').click(); await tracker.locator('#pee').check();
+    await page.locator('#navToggle').click();
+    page.once('dialog', dialog => dialog.dismiss());
+    await page.locator('#tabs .tab-label').first().click();
+    assert.equal(await tracker.locator('#editor').isVisible(), true);
+    page.once('dialog', dialog => dialog.accept());
+    await page.locator('#tabs .tab-label').first().click();
+    await page.locator('#addonView').waitFor({state:'hidden'});
+    assert.equal(new URL(page.url()).pathname, '/');
+    assert.equal(new URL(page.url()).searchParams.has('addon'), false);
     await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
     assert.equal((await req(endpoint + '?list=' + ref, 'GET', undefined, tokens[1])).items.length, 1);
-    // Existing sharing revocation takes effect immediately for every add-on route.
+    // The Checky admin manages independent baby lists inside the same shell.
+    const adminContext = await browser.newContext({viewport:{width:1100,height:900}});
+    const adminPage = await adminContext.newPage();
+    adminPage.on('pageerror', error => errors.push(error.message));
+    await adminPage.goto(origin);
+    await adminPage.locator('#loginEmailInput').fill('admin@baby.invalid');
+    await adminPage.locator('#loginPasswordInput').fill(password); await adminPage.locator('#loginSubmitBtn').click();
+    await adminPage.locator('#loginOverlay').waitFor({state:'hidden'});
+    await adminPage.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
+    await adminPage.locator('#navToggle').click();
+    await adminPage.getByRole('button',{name:'Manage baby lists',exact:true}).click();
+    const manager = adminPage.frameLocator('#addonFrame');
+    await manager.locator('#listManager').waitFor({state:'visible'});
+    await manager.locator('#managedList').selectOption('');
+    await manager.locator('#babyListName').fill('Baby without a Shared checklist');
+    await manager.locator('#memberChoices input[value="' + users[2].id + '"]').check();
+    await manager.locator('#saveList').click();
+    await manager.locator('#listManager').waitFor({state:'hidden'});
+    await manager.getByRole('heading',{name:'Baby without a Shared checklist',exact:true}).waitFor();
+    const independent = (await req(listEndpoint,'GET',undefined,tokens[2])).items[0];
+    assert.equal(independent.name,'Baby without a Shared checklist');
+    assert.equal((await req(listEndpoint,'GET',undefined,tokens[1])).items.some(item=>item.ref===independent.ref),false);
+    assert.equal(new URL(adminPage.url()).pathname,'/');
+    await manager.locator('#manageLists').click();
+    await manager.locator('#babyListName').fill('Renamed baby list');
+    await manager.locator('#memberChoices input[value="' + users[2].id + '"]').uncheck();
+    await manager.locator('#saveList').click(); await manager.locator('#listManager').waitFor({state:'hidden'});
+    await manager.getByRole('heading',{name:'Renamed baby list',exact:true}).waitFor();
+    await req(endpoint + '?list=' + independent.ref,'GET',undefined,tokens[2],404);
+    if (process.env.CHECKY_SCREENSHOT_DIR) {
+      await adminPage.locator('#navToggle').click();
+      await adminPage.getByRole('button',{name:'Renamed baby list',exact:true}).waitFor();
+      await adminPage.waitForFunction(() => !state.ui.availableChecklistsLoading);
+      await adminPage.screenshot({path:path.join(process.env.CHECKY_SCREENSHOT_DIR,'baby-integrated-admin.png')});
+    }
+    await adminContext.close();
+    console.log('PASS integrated admin create/rename/assign/remove controls and independent baby-list membership');
+    // Ordinary Shared membership is independent. Only the baby-list admin assignment controls baby access.
     await req('/api/collections/shared_checklists/records/' + shared.id, 'PATCH', { sharedWith: [] }, admin.token);
     await req('/api/collections/users/records/' + users[1].id, 'PATCH', { assignedSharedChecklist: '' }, admin.token);
+    await req(endpoint + '?list=' + ref, 'GET', undefined, tokens[1]);
+    await req(listEndpoint + '/' + ref.split(':')[1], 'PATCH', {version:2,name:'Family baby log',members:[users[0].id]}, adminUser.token);
     await req(endpoint + '?list=' + ref, 'GET', undefined, tokens[1], 404);
     await req(endpoint + '/' + created.id, 'PATCH', { version: 2, entry: seed }, tokens[1], 404);
     // Uninstall only the add-on code; keep the same database and existing users.
@@ -213,9 +316,11 @@ async function main() {
     await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
     await page.locator('#navToggle').click(); await page.locator('[data-addon-id="baby-tracker"]').waitFor({state:'visible'});
     assert.equal((await req(endpoint + '?list=' + ref, 'GET', undefined, tokens[0])).items[0].id, created.id);
+    await req('/api/collections/shared_checklists/records/' + shared.id, 'DELETE', undefined, admin.token, 204);
+    assert.equal((await req(endpoint + '?list=' + ref, 'GET', undefined, tokens[0])).items[0].id, created.id, 'Deleting an ordinary checklist must not delete an independent baby log');
     console.log('PASS separate install, removal and reinstall retain the same database, users, lists and baby entries');
     assert.deepEqual(errors, []);
-    console.log('PASS installed add-on navigation, timestamp edits, precise ml/oz, notes/checkboxes, reload, phone layout, XSS-safe text, offline draft, concurrent edits, deletion and access revocation');
+    console.log('PASS installed add-on navigation, timestamp edits, precise ml/oz, notes/checkboxes, reload, phone layout, XSS-safe text, offline draft, concurrent edits, integrated navigation, unsaved-entry guard, deletion and independent access revocation');
   } catch (error) { console.error(log.slice(-7000)); throw error; }
   finally {
     await browser?.close(); if (server) await new Promise(resolve => server.close(resolve));
