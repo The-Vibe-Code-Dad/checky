@@ -52,6 +52,7 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/checky-browser" --no-save --ignore-scripts --no-audit --no-fund playwright@1.64.1
           node "$RUNNER_TEMP/checky-browser/node_modules/playwright/cli.js" install --with-deps chromium
+          CHECKY_PLAYWRIGHT_MODULE="$RUNNER_TEMP/checky-browser/node_modules/playwright" node checkys-base/test/menus-browser.cjs
           CHECKY_PLAYWRIGHT_MODULE="$RUNNER_TEMP/checky-browser/node_modules/playwright" CHECKY_POCKETBASE_BINARY="$RUNNER_TEMP/checky-pocketbase" node checkys-base/test/pwa-browser.cjs
           CHECKY_PLAYWRIGHT_MODULE="$RUNNER_TEMP/checky-browser/node_modules/playwright" CHECKY_POCKETBASE_BINARY="$RUNNER_TEMP/checky-pocketbase" node checkys-base/test/baby-tracker.cjs
       - name: Validate web image and generated app version

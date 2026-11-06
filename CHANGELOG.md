@@ -332,6 +332,20 @@ base:
 - Removed the in-app management screen, membership/user-directory endpoints and Checky app-admin access bypass. Every app account needs explicit membership; Baby stays integrated beside Personal and Shared with the existing day-grouped log.
 - Added a migration that preserves lists/members/entries while removing the retired membership-editor version field. Verified native PocketBase create/rename/assign/revoke with two superusers, denied access for regular and first-user accounts, preserved upgrades and integrated navigation; all tracker integration and eight build/auth unit checks passed.
 
+## v0066 - 2026-11-05
+- Hide the Baby navigation category when the signed-in user has no assigned baby lists, matching Shared. It appears after a PocketBase admin assigns a list and disappears when access to the last baby list is removed.
+
+## v0067 - 2026-11-05
+- Replaced tab hold-to-delete with a dropdown containing Rename, Move up/down, Always show/remove shortcut and explicit Delete confirmation. Right-click and the keyboard context-menu shortcut open the same menu; dedicated drag handles still reorder tabs.
+- Fixed bottom-of-list touch menus by placing them within the visible viewport and flipping above the press when needed. Keyboard/browser resizing and duplicate native context-menu events keep the existing buttons in place, and releasing a hold cannot accidentally activate a menu action.
+- Preserved the Done archive when deleting the final ordinary tab. Added browser coverage for tab actions, last-item holds at three phone sizes, gesture cancellation, dragging and archive preservation, and included the shared menu helper in versioned PWA caching.
+- Verified the Base/desktop menu regression, complete installed-web update/Done sync suite, three web build/cache checks and five desktop security checks. Physical phone behavior and published deployments/installers remain outside these local checks.
+
+## v0068 - 2026-11-05
+- Added Always show / Remove shortcut to Baby list hold, right-click and keyboard menus. Pinned lists stay above collapsed navigation folders, with preferences saved per account in this browser.
+- Resolve shortcuts against currently installed, assigned lists so labels follow renames and unavailable lists disappear. Preserved unfinished-entry protection when opening a pinned Baby list.
+- Verified touch release, pin/unpin, reload persistence, collapsed folders, renames, access removal and add-on reinstall with real PocketBase/Chromium. The existing Base/desktop menu regressions and three web build/cache checks also passed.
+
 desktop:
 
 ## v0001 - 2026-04-07
@@ -461,6 +475,10 @@ desktop:
 ## v0036 - 2026-11-05
 - Kept repeating-item completion timestamps through desktop storage/sync and added source support for checking one occurrence, displaying its scheduled reset, and permanent Mark done with or without the archive. The public desktop installer version is unchanged.
 - Applied server reset metadata to the open window without overwriting newer edits; ignored derived reset times when checking for unsynced changes.
+
+## v0037 - 2026-11-05
+- Added the same tab hold/right-click menu as Base, including rename, reordering, shortcut toggling and confirmed deletion. Deleting the final ordinary tab now preserves the Done archive.
+- Shared Base's press-release protection and viewport-aware menu placement; resizing no longer rebuilds menu buttons. Verified the desktop renderer's menu interactions in Chromium; the packaged desktop version/installers are unchanged.
 
 pocketbase:
 

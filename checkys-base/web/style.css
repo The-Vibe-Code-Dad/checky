@@ -546,8 +546,10 @@ hr{
 }
 .context-menu{
   position:fixed;
+  width:max-content;
   max-height:calc(100dvh - 16px);
   overflow-y:auto;
+  overscroll-behavior:contain;
   z-index:1000;
   min-width:190px;
   background:#222;
@@ -658,24 +660,10 @@ hr{
     width:min(360px, 92vw);
   }
   .context-menu{
-    left:12px !important;
-    right:12px !important;
-    top:auto !important;
-    bottom:calc(12px + env(safe-area-inset-bottom));
-    width:auto;
-    min-width:0;
-    border-radius:16px;
-    padding:10px;
+    min-width:min(230px, calc(100vw - 16px));
+    border-radius:12px;
+    padding:8px;
     box-shadow:0 18px 40px rgba(0,0,0,.55);
-  }
-  .context-menu::before{
-    content:"";
-    display:block;
-    width:42px;
-    height:4px;
-    border-radius:999px;
-    background:#5c5c5c;
-    margin:0 auto 8px;
   }
   .context-menu-item{
     padding:14px 12px;
