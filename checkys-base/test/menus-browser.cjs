@@ -44,7 +44,7 @@ async function main() {
           loadState: async () => result(),
           saveChecklist: async data => { checklist = clone(data); return clone(checklist); },
           saveSettings: async data => { settings = clone(data); return { ok: true, settings: clone(settings) }; },
-          syncNow: async data => { if (data) checklist = clone(data); return result(); },
+          syncNow: async data => { window.checkyTestSyncStarted = true; if (data) checklist = clone(data); return result(); },
           listAccessibleChecklists: async () => ({ ok: true, checklists: [], currentChecklistId: '', settings: clone(settings) }),
           listBackups: async () => [], checkForUpdates: async () => ({ available: false }),
           onWindowSyncRequested() {}, onVerificationCodeRequested() {}, onReminderResetTimes() {}
@@ -54,7 +54,9 @@ async function main() {
       const page = await context.newPage(), errors = [];
       page.on('pageerror', error => errors.push(error.message));
       await page.goto(`http://127.0.0.1:${server.address().port}/${surface}/`);
-      await page.waitForFunction(() => typeof state !== 'undefined' && state.data.tabs[0]?.id === 'alpha' && !state.ui.syncInProgress);
+      // Base schedules startup sync after first render. A merely idle renderer can
+      // still rebuild the tabs during the first hold, so wait for that sync to finish.
+      await page.waitForFunction(() => window.checkyTestSyncStarted && typeof state !== 'undefined' && state.data.tabs[0]?.id === 'alpha' && !state.ui.syncInProgress);
       const touch = await context.newCDPSession(page);
       const menu = page.locator('#itemContextMenu');
       async function hold(locator) {

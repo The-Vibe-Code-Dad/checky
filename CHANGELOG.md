@@ -346,6 +346,9 @@ base:
 - Resolve shortcuts against currently installed, assigned lists so labels follow renames and unavailable lists disappear. Preserved unfinished-entry protection when opening a pinned Baby list.
 - Verified touch release, pin/unpin, reload persistence, collapsed folders, renames, access removal and add-on reinstall with real PocketBase/Chromium. The existing Base/desktop menu regressions and three web build/cache checks also passed.
 
+## v0069 - 2026-11-05
+- Fixed the menu browser test's startup race: wait for the initial sync to finish before holding a tab, preventing the scheduled sync from rebuilding controls mid-gesture on faster CI runners. Kept all menu, touch, archive and publication checks enabled.
+
 desktop:
 
 ## v0001 - 2026-04-07
