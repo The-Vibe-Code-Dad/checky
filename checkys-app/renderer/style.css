@@ -388,6 +388,7 @@ hr{
 }
 .context-menu{
   position:fixed;
+  width:max-content;
   z-index:1000;
   min-width:170px;
   background:#222;
@@ -395,6 +396,10 @@ hr{
   border-radius:8px;
   padding:6px;
   box-shadow:0 12px 30px rgba(0,0,0,.45);
+}
+.context-menu:not(:has(.context-submenu)){
+  overflow-y:auto;
+  overscroll-behavior:contain;
 }
 .context-menu.hidden{
   display:none;

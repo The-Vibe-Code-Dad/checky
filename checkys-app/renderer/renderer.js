@@ -1028,6 +1028,98 @@ function clearItemDragState() {
   });
 }
 
+function bindTabContextMenu(element, index) {
+  element.tabIndex = 0;
+  window.checkyContextMenu.bindHold(element, (x, y) => openTabContextMenu(index, x, y));
+  element.oncontextmenu = (event) => {
+    if (event.target.closest("input, button, .drag-handle")) return;
+    event.preventDefault();
+    openTabContextMenu(index, event.clientX, event.clientY);
+  };
+  element.onkeydown = (event) => {
+    if (event.target !== element || !(event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) return;
+    event.preventDefault();
+    const bounds = element.getBoundingClientRect();
+    openTabContextMenu(index, bounds.left, bounds.bottom);
+    els.itemContextMenu.querySelector("button:not(:disabled)")?.focus();
+  };
+}
+
+function openTabContextMenu(index, x, y) {
+  const tab = state.data.tabs[index];
+  if (!tab || isDoneTab(tab) || state.ui.draggedTabIndex !== null) return;
+  if (state.ui.itemContextMenu?.kind === "tab" && state.ui.itemContextMenu.tabId === tab.id) return;
+  state.ui.itemContextMenu = { kind: "tab", tabId: tab.id, x, y };
+  renderItemContextMenu();
+}
+
+function moveTabByOffset(index, offset) {
+  const entries = state.data.tabs.map((tab, index) => ({ tab, index })).filter(({ tab }) => !isDoneTab(tab));
+  const position = entries.findIndex(entry => entry.index === index);
+  const target = entries[position + offset];
+  if (position < 0 || !target) return;
+  const activeTab = state.data.tabs[state.data.active];
+  const lastTab = state.data.tabs[state.ui.lastChecklistTabIndex];
+  moveInArray(state.data.tabs, index, target.index);
+  state.data.active = state.data.tabs.indexOf(activeTab);
+  state.ui.lastChecklistTabIndex = state.data.tabs.indexOf(lastTab);
+  render();
+  debounceSaveChecklist();
+}
+
+function toggleTabShortcut(tab) {
+  ensureNavigationPreferences();
+  const checklistId = state.currentChecklistId || "local";
+  const wasVisible = isTabAlwaysVisible(tab.id);
+  const pins = state.ui.navigationPreferences.alwaysVisibleTabs.filter(pin => pin.checklistId !== checklistId || pin.tabId !== tab.id);
+  if (!wasVisible) pins.push({ checklistId, tabId: tab.id, name: tab.name });
+  state.ui.navigationPreferences.alwaysVisibleTabs = pins;
+  saveNavigationPreferences();
+  renderTabs();
+}
+
+function renderTabContextMenu(menuState) {
+  const index = state.data.tabs.findIndex(tab => tab.id === menuState.tabId && !isDoneTab(tab));
+  if (index < 0) { closeItemContextMenu(); return; }
+  const tab = state.data.tabs[index];
+  const regularTabs = state.data.tabs.filter(tab => !isDoneTab(tab));
+  els.itemContextMenu.replaceChildren();
+  els.itemContextMenu.classList.remove("hidden");
+  const add = (label, action, { disabled = false, danger = false, keepOpen = false } = {}) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "context-menu-item" + (danger ? " danger" : "");
+    button.textContent = label;
+    button.disabled = disabled;
+    button.onclick = (event) => {
+      event.stopPropagation();
+      if (!keepOpen) closeItemContextMenu();
+      action();
+    };
+    els.itemContextMenu.appendChild(button);
+  };
+  if (menuState.confirmDelete) {
+    add("Delete tab", () => deleteTabAt(index), { danger: true });
+    add("Cancel", () => {});
+  } else {
+    add("Rename", () => {
+      state.ui.tabDeleteConfirmIndex = null;
+      state.ui.editingTabIndex = index;
+      renderTabs();
+      const input = document.querySelector(".tab-name-input");
+      input?.focus(); input?.select();
+    });
+    add("Move up", () => moveTabByOffset(index, -1), { disabled: regularTabs[0] === tab });
+    add("Move down", () => moveTabByOffset(index, 1), { disabled: regularTabs.at(-1) === tab });
+    add(isTabAlwaysVisible(tab.id) ? "Remove shortcut" : "Always show", () => toggleTabShortcut(tab));
+    add("Delete", () => {
+      menuState.confirmDelete = true;
+      renderTabContextMenu(menuState);
+    }, { danger: true, keepOpen: true });
+  }
+  window.checkyContextMenu.position(els.itemContextMenu, menuState);
+}
+
 function closeItemContextMenu() {
   state.ui.itemContextMenu = null;
   els.itemContextMenu.classList.add("hidden");
@@ -1035,27 +1127,18 @@ function closeItemContextMenu() {
 }
 
 function positionContextMenu(menuState) {
-  const menu = els.itemContextMenu;
-  const padding = 8;
-  const menuRect = menu.getBoundingClientRect();
-  let left = menuState.x;
-  let top = menuState.y;
-
-  if (left + menuRect.width > window.innerWidth - padding) {
-    left = Math.max(padding, window.innerWidth - menuRect.width - padding);
-  }
-  if (top + menuRect.height > window.innerHeight - padding) {
-    top = Math.max(padding, window.innerHeight - menuRect.height - padding);
-  }
-
-  menu.style.left = `${left}px`;
-  menu.style.top = `${top}px`;
+  if (menuState) window.checkyContextMenu.position(els.itemContextMenu, menuState);
 }
 
 function renderItemContextMenu() {
   const menuState = state.ui.itemContextMenu;
   if (!menuState) {
     closeItemContextMenu();
+    return;
+  }
+
+  if (menuState.kind === "tab") {
+    renderTabContextMenu(menuState);
     return;
   }
 
@@ -1396,6 +1479,21 @@ function renderSettings() {
   els.hotkeyHint.textContent = state.ui.captureHotkey ? "Press desired combination now." : "";
 }
 
+function deleteTabAt(index) {
+  if (!state.data.tabs[index] || isDoneTab(state.data.tabs[index])) return;
+  const activeTab = state.data.tabs[state.data.active];
+  state.data.tabs.splice(index, 1);
+  if (!state.data.tabs.some(tab => !isDoneTab(tab))) {
+    state.data.tabs.unshift({ id: createEntityId("tab"), name: "Tab 1", items: [] });
+  }
+  state.data.active = getSafeChecklistTabIndex(state.data.tabs.indexOf(activeTab));
+  state.ui.lastChecklistTabIndex = state.data.active;
+  state.ui.tabDeleteConfirmIndex = null;
+  render();
+  debounceSaveChecklist();
+}
+
+
 function beginTabRename(index) {
   state.ui.editingTabIndex = index;
   renderTabs();
@@ -1421,6 +1519,7 @@ function renderTabs() {
   visibleTabs.forEach(({ tab: tabData, index: i }) => {
     const tab = document.createElement("div");
     tab.className = "tab" + (i === state.data.active ? " active" : "");
+    tab.dataset.tabIndex = String(i);
     if (state.ui.editingTabIndex === i) {
       const input = document.createElement("input");
       input.className = "tab-name-input";
@@ -1454,6 +1553,7 @@ function renderTabs() {
       addAlwaysShowOption(tab, tabData, input);
       setTimeout(() => input.focus(), 0);
     } else {
+      bindTabContextMenu(tab, i);
       const label = document.createElement("span");
       label.className = "tab-label";
       label.textContent = tabData.name;
@@ -1477,19 +1577,7 @@ function renderTabs() {
         confirmBtn.textContent = "Confirm";
         confirmBtn.onclick = (e) => {
           e.stopPropagation();
-          const regularTabs = state.data.tabs.filter((tab) => !isDoneTab(tab));
-          if (regularTabs.length === 1) {
-            state.data = normalizeData(DEFAULT_DATA);
-            if (state.settings.showDoneTab) {
-              ensureDoneTabState();
-            }
-          } else {
-            state.data.tabs.splice(i, 1);
-            if (state.data.active >= state.data.tabs.length) state.data.active = state.data.tabs.length - 1;
-          }
-          state.ui.tabDeleteConfirmIndex = null;
-          render();
-          debounceSaveChecklist();
+          deleteTabAt(i);
         };
 
         const cancelBtn = document.createElement("button");
@@ -2110,14 +2198,14 @@ function bindEvents() {
   });
 
   document.addEventListener("contextmenu", (e) => {
-    if (e.target.closest(".item")) return;
+    if (e.target.closest(".item, .tab")) return;
     closeItemContextMenu();
   });
 
-  window.addEventListener("resize", () => {
-    if (!state.ui.itemContextMenu) return;
-    renderItemContextMenu();
-  });
+  const repositionMenu = () => positionContextMenu(state.ui.itemContextMenu);
+  window.addEventListener("resize", repositionMenu);
+  window.visualViewport?.addEventListener("resize", repositionMenu);
+  window.visualViewport?.addEventListener("scroll", repositionMenu);
 
   els.syncNowBtn.onclick = async () => {
     await runSync("pull_latest");
