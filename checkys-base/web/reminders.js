@@ -21,16 +21,13 @@
     const path = document.getElementById('systemNotificationPath');
     const agent = navigator.userAgent;
     if (/Android/i.test(agent)) {
-      // A same-document fallback keeps the dialog open when the OS restricts this intent.
-      const fallback = new URL(location.href);
-      fallback.hash = 'systemNotificationPath';
-      link.href = 'intent:#Intent;action=android.settings.NOTIFICATION_SETTINGS;package=com.android.settings;' +
-        'S.browser_fallback_url=' + encodeURIComponent(fallback.href) + ';end';
+      // A web fallback can relaunch an installed PWA. A package fallback can open the store.
+      link.href = 'intent:#Intent;action=android.settings.NOTIFICATION_SETTINGS;end';
       link.textContent = 'Open notification settings';
       link.hidden = false;
       path.textContent = '';
       link.onclick = () => {
-        path.textContent = ' If the link stays here, open Settings → Notifications on your phone.';
+        path.textContent = 'If Settings stays closed, hold the Checky app icon and tap App info → Notifications.';
       };
     } else if (/Windows NT/i.test(agent)) {
       link.href = 'ms-settings:notifications';

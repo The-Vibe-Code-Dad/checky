@@ -100,7 +100,10 @@
             <h2 id="notificationSettingsTitle">Notification settings</h2>
             <button id="notificationsToggle" type="button" class="btn btn-primary" disabled>Enable notifications</button>
             <p id="notificationsStatus" class="hint" role="status" hidden></p>
-            <p class="hint"><a id="systemNotificationSettings" hidden></a><span id="systemNotificationPath"></span></p>
+            <div class="notification-system-controls">
+              <a id="systemNotificationSettings" hidden></a>
+              <p id="systemNotificationPath" class="hint" role="status"></p>
+            </div>
             <form method="dialog"><button class="btn btn-ghost">Close</button></form>
           </dialog>
         </div>
