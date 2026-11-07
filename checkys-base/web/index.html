@@ -93,8 +93,12 @@
         </div>
         <div class="setting-row">
           <label>Event reminders</label>
-          <div class="inline"><button id="notificationsToggle" type="button" class="btn btn-primary">Enable notifications</button></div>
+          <div class="inline">
+            <button id="notificationsToggle" type="button" class="btn btn-primary">Enable notifications</button>
+            <button id="notificationsTest" type="button" class="btn btn-ghost" disabled>Test notification</button>
+          </div>
           <div id="notificationsStatus" class="hint" role="status" aria-live="polite"></div>
+          <div class="hint">Reminders use your device’s notification sound. If the test is quiet, check the notification’s sound settings. To use a custom sound on Android, <a href="./checky-chime.wav" download="Checky chime.wav">download the Checky chime</a> and select it in those settings.</div>
           <div class="hint">Hold down an item (or right-click it), then choose Remind to set its date, time and repeat options, including specific weekdays. Checking a repeating item completes this occurrence and resets at its next scheduled time. Mark done, deleting the item or removing its reminder stops the series once synced. Delivery may be delayed by your browser or device settings.</div>
         </div>
         <div class="setting-row">

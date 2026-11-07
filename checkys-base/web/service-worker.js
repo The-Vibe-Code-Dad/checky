@@ -16,19 +16,27 @@ const APP_SHELL = [
   "./pwa.js?v=__CHECKY_BUILD__",
   "./manifest.webmanifest",
   "./icon-192.png",
+  "./reminder-badge.png",
+  "./checky-chime.wav",
   "./icon-512.png",
   "./logo.png"
 ];
 
+function showReminder(payload, preview = false) {
+  return self.registration.showNotification(preview ? "Checky's List test reminder" : "Checky's List reminder", {
+    body: typeof payload.body === 'string' ? payload.body.slice(0, 200) : 'An event reminder is due.',
+    icon: './icon-192.png', badge: './reminder-badge.png',
+    // The OS plays the notification channel's sound, including with no windows open.
+    // Retries of a delivered occurrence replace it quietly; repeated previews can ring again.
+    silent: false, renotify: preview,
+    tag: typeof payload.tag === 'string' ? payload.tag : 'checky-reminder',
+    data: { url: typeof payload.url === 'string' ? payload.url : '/' }
+  });
+}
 self.addEventListener('push', event => {
   let payload = {};
   try { payload = event.data?.json() || {}; } catch (_) {}
-  event.waitUntil(self.registration.showNotification("Checky's List reminder", {
-    body: typeof payload.body === 'string' ? payload.body.slice(0, 200) : 'An event reminder is due.',
-    icon: './icon-192.png', badge: './icon-192.png',
-    tag: typeof payload.tag === 'string' ? payload.tag : 'checky-reminder',
-    data: { url: typeof payload.url === 'string' ? payload.url : '/' }
-  }));
+  event.waitUntil(showReminder(payload));
 });
 self.addEventListener('notificationclick', event => {
   event.notification.close();
@@ -44,6 +52,11 @@ self.addEventListener('notificationclick', event => {
 
 self.addEventListener('message', event => {
   if (event.data?.type === 'CHECKY_VERSION') event.ports[0]?.postMessage({ version: BUILD });
+  if (event.data?.type === 'CHECKY_TEST_REMINDER' && event.ports[0]) {
+    const reply = event.ports[0];
+    event.waitUntil(showReminder({ body: 'This is a test on this device.', tag: 'checky-reminder-preview' }, true)
+      .then(() => reply.postMessage({ ok: true }), () => reply.postMessage({ ok: false })));
+  }
 });
 
 self.addEventListener('install', event => {
