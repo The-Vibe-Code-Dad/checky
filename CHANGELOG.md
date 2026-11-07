@@ -362,6 +362,9 @@ base:
 - Replaced the reminder preview and instructions in Settings with one Notification settings button. Its panel keeps this device’s enable/disable control and hands enabled users off to system settings on Android and Windows.
 - Removed the test notification handler and the chime download from the settings screen and offline cache.
 
+## v0073 - 2026-11-06
+- Notification settings now always opens Checky’s dialog. Only tapping the blue link requests the system Notifications screen. Android browsers that block the shortcut can return to the same dialog for the manual path.
+
 desktop:
 
 ## v0001 - 2026-04-07

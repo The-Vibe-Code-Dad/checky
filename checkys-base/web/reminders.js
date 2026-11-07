@@ -21,11 +21,17 @@
     const path = document.getElementById('systemNotificationPath');
     const agent = navigator.userAgent;
     if (/Android/i.test(agent)) {
-      // Android exposes its main Settings activity to browser links.
-      link.href = 'intent:#Intent;action=android.settings.SETTINGS;package=com.android.settings;end';
-      link.textContent = 'Phone settings';
+      // A same-document fallback keeps the dialog open when the OS restricts this intent.
+      const fallback = new URL(location.href);
+      fallback.hash = 'systemNotificationPath';
+      link.href = 'intent:#Intent;action=android.settings.NOTIFICATION_SETTINGS;package=com.android.settings;' +
+        'S.browser_fallback_url=' + encodeURIComponent(fallback.href) + ';end';
+      link.textContent = 'Open notification settings';
       link.hidden = false;
-      path.textContent = ' → Notifications → App notifications → Checky or your browser.';
+      path.textContent = '';
+      link.onclick = () => {
+        path.textContent = ' If the link stays here, open Settings → Notifications on your phone.';
+      };
     } else if (/Windows NT/i.test(agent)) {
       link.href = 'ms-settings:notifications';
       link.textContent = 'Open Windows notification settings';
@@ -37,10 +43,6 @@
     }
     refreshToggle();
     settingsDialog.showModal();
-    if (!link.hidden && optedIn() && supported() && Notification.permission === 'granted') {
-      // Keep the controls available when the user returns or the browser declines the handoff.
-      link.click();
-    }
   }
   document.getElementById('notificationSettings').onclick = openSettings;
   async function api(method, body) {
