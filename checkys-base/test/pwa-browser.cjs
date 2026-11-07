@@ -8,7 +8,7 @@ const { spawn } = require('node:child_process');
 const { once } = require('node:events');
 const { buildWeb } = require('../scripts/build-web.cjs');
 const { checkDoneArchive } = require('./done-archive-browser.cjs');
-const { chromium } = require(process.env.CHECKY_PLAYWRIGHT_MODULE || 'playwright');
+const { chromium, devices } = require(process.env.CHECKY_PLAYWRIGHT_MODULE || 'playwright');
 const password = 'Disposable-PWA-Only-20261104!';
 async function main() {
   if (!process.env.CHECKY_POCKETBASE_BINARY) throw Error('Set CHECKY_POCKETBASE_BINARY to a disposable test binary.');
@@ -58,7 +58,7 @@ async function main() {
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     const origin = 'http://127.0.0.1:' + server.address().port;
     browser = await chromium.launch({ executablePath: process.env.CHECKY_CHROMIUM_EXECUTABLE || undefined, headless: true, args: ['--no-sandbox'] });
-    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, userAgent: devices['Pixel 5'].userAgent });
     // Headless Chromium can reset its notification permission on navigation.
     // Keep permission granted here to test opt-in persistence, not push providers.
     await context.addInitScript(() => Object.defineProperty(Notification, 'permission', { get: () => 'granted' }));
@@ -73,26 +73,31 @@ async function main() {
     await page.waitForFunction(() => !!navigator.serviceWorker.controller);
     await page.locator('#navToggle').click();
     await page.locator('#settingsToggle').click();
-    // Headless Chromium cannot verify speakers. Capture only the final OS call;
-    // exercise the settings button, actual worker, icon URLs and success/failure reply.
-    const firstWorker = context.serviceWorkers()[0];
-    await firstWorker.evaluate(() => { self.registration.showNotification = async (title, options) => { self.testPreview = {title, options}; }; });
-    await page.locator('#notificationsTest').click();
-    await page.waitForFunction(() => document.getElementById('notificationsStatus').textContent.includes('sent to this device'));
-    const preview = await firstWorker.evaluate(() => self.testPreview);
-    assert.match(preview.title, /test reminder/i);
-    assert.equal(preview.options.silent, false);
-    assert.equal(preview.options.renotify, true, 'Users can retest sound without dismissing the previous preview');
-    await firstWorker.evaluate(() => { self.registration.showNotification = async () => { throw Error('Permission revoked'); }; });
-    await page.locator('#notificationsTest').click();
-    await page.waitForFunction(() => document.getElementById('notificationsStatus').textContent.includes('could not show'));
-    await firstWorker.evaluate(() => { delete self.registration.showNotification; });
+    const openSettings = page.getByRole('button', { name: 'Notification settings', exact: true });
+    const dialog = page.getByRole('dialog', { name: 'Notification settings' });
+    await page.evaluate(() => {
+      // Capture the external navigation since there is no Android Settings app on CI.
+      window.systemSettingsHandoffs = [];
+      document.getElementById('systemNotificationSettings').addEventListener('click', event => {
+        event.preventDefault();
+        window.systemSettingsHandoffs.push(event.currentTarget.href);
+      });
+    });
+    await openSettings.click();
+    assert.equal(await dialog.getByRole('button', {name: 'Enable notifications'}).isEnabled(), true);
+    assert.deepEqual(await page.evaluate(() => window.systemSettingsHandoffs), []);
+    await dialog.getByRole('button', {name:'Close'}).click();
+    await page.evaluate(() => localStorage.setItem('checky-notifications-' + state.hostedSession.user.id, 'on'));
+    await openSettings.click();
+    assert.equal(await dialog.getByRole('button', {name:'Turn off notifications'}).isVisible(), true);
+    assert.deepEqual(await page.evaluate(() => window.systemSettingsHandoffs), ['intent:#Intent;action=android.settings.SETTINGS;package=com.android.settings;end']);
+    await page.keyboard.press('Escape');
+    assert.equal(await openSettings.evaluate(el => el === document.activeElement), true);
     await page.locator('#specialViewCloseBtn').click();
-    console.log('PASS device-only reminder preview and denied notification feedback');
+    console.log('PASS compact notification settings, opt-in, Android Settings handoff and keyboard return');
     await page.evaluate(async () => {
       await caches.open('unrelated-test-cache');
       localStorage.setItem('checky-test-preference', 'keep');
-      localStorage.setItem('checky-notifications-' + state.hostedSession.user.id, 'on');
     });
     await page.locator('#addItemBtn').click();
     await page.locator('#list textarea').fill('Keep this checklist');
@@ -164,13 +169,11 @@ async function main() {
     assert.equal(await page.locator('#appUpdateBanner').isVisible(), false);
     await context.setOffline(true);
     await page.reload();
-    const assetsOffline = await page.evaluate(async ({icon, badge}) => {
+    const assetsOffline = await page.evaluate(async () => {
       const png = async url => Array.from(new Uint8Array(await (await fetch(url)).arrayBuffer()).slice(0, 4));
-      const tone = await fetch(document.querySelector('a[download="Checky chime.wav"]').href);
-      const wav = new Uint8Array(await tone.arrayBuffer());
-      return [await png(icon), await png(badge), String.fromCharCode(...wav.slice(0, 4), ...wav.slice(8, 12))];
-    }, preview.options);
-    assert.deepEqual(assetsOffline, [[137,80,78,71], [137,80,78,71], 'RIFFWAVE']);
+      return [await png('./icon-192.png'), await png('./reminder-badge.png')];
+    });
+    assert.deepEqual(assetsOffline, [[137,80,78,71], [137,80,78,71]]);
     assert.ok((await page.locator('script[src*="pwa.js"]').getAttribute('src')).includes(versions[1]));
     await page.evaluate(() => document.getElementById('appUpdateCheck').click());
     await page.waitForFunction(() => /offline|connection|connected/.test(document.getElementById('appUpdateStatus').textContent));
