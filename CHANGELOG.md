@@ -365,6 +365,10 @@ base:
 ## v0073 - 2026-11-06
 - Notification settings now always opens Checky’s dialog. Only tapping the blue link requests the system Notifications screen. Android browsers that block the shortcut can return to the same dialog for the manual path.
 
+## v0074 - 2026-11-07
+- Enlarged the notification settings link to a full-width, 48-pixel touch target and spaced it away from the other actions.
+- Removed the Android shortcut’s redirect back to Checky, which could reopen the installed app when the phone blocked the shortcut. The dialog shows the manual App info path after a tap.
+
 desktop:
 
 ## v0001 - 2026-04-07

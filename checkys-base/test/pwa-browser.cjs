@@ -76,10 +76,9 @@ async function main() {
     const openSettings = page.getByRole('button', { name: 'Notification settings', exact: true });
     const dialog = page.getByRole('dialog', { name: 'Notification settings' });
     await page.evaluate(() => {
-      // Capture the external navigation since there is no Android Settings app on CI.
+      // This browser has no Android Settings handler. Let the real tap run.
       window.systemSettingsHandoffs = [];
       document.getElementById('systemNotificationSettings').addEventListener('click', event => {
-        event.preventDefault();
         window.systemSettingsHandoffs.push(event.currentTarget.href);
       });
     });
@@ -91,19 +90,28 @@ async function main() {
     await openSettings.click();
     assert.equal(await dialog.getByRole('button', {name:'Turn off notifications'}).isVisible(), true);
     assert.deepEqual(await page.evaluate(() => window.systemSettingsHandoffs), [], 'Opening the dialog should never launch system settings');
-    await dialog.getByRole('link', {name: 'Open notification settings'}).click();
-    const fallbackUrl = new URL('#systemNotificationPath', page.url()).href;
+    const settingsLink = dialog.getByRole('link', {name: 'Open notification settings'});
+    const bounds = await settingsLink.boundingBox();
+    assert.ok(bounds.height >= 48);
+    assert.equal(bounds.width, await settingsLink.evaluate(el => el.parentElement.clientWidth));
+    const initialUrl = page.url();
+    const navigationsDuringTap = [];
+    const onNavigation = frame => { if (frame === page.mainFrame()) navigationsDuringTap.push(frame.url()); };
+    page.on('framenavigated', onNavigation);
+    // Tap inside the row away from its text, as on a phone.
+    await settingsLink.tap({position: {x: 5, y: 5}});
     assert.deepEqual(await page.evaluate(() => window.systemSettingsHandoffs), [
-      'intent:#Intent;action=android.settings.NOTIFICATION_SETTINGS;package=com.android.settings;' +
-        'S.browser_fallback_url=' + encodeURIComponent(fallbackUrl) + ';end'
+      'intent:#Intent;action=android.settings.NOTIFICATION_SETTINGS;end'
     ]);
-    await page.goto(fallbackUrl);
-    assert.equal(await dialog.isVisible(), true, 'The browser fallback should keep the dialog open');
-    assert.match(await dialog.locator('#systemNotificationPath').innerText(), /Settings → Notifications/);
+    assert.equal(await dialog.isVisible(), true);
+    assert.match(await dialog.locator('#systemNotificationPath').innerText(), /App info → Notifications/);
     await page.keyboard.press('Escape');
     assert.equal(await openSettings.evaluate(el => el === document.activeElement), true);
+    assert.equal(page.url(), initialUrl);
+    assert.deepEqual(navigationsDuringTap, []);
+    page.off('framenavigated', onNavigation);
     await page.locator('#specialViewCloseBtn').click();
-    console.log('PASS notification dialog, explicit Android notification link, same-page fallback and keyboard return');
+    console.log('PASS phone-sized settings tap target, Android settings request and dismissal without reopening Checky');
     await page.evaluate(async () => {
       await caches.open('unrelated-test-cache');
       localStorage.setItem('checky-test-preference', 'keep');
