@@ -354,6 +354,10 @@ base:
 - Today's entries stay open. Older local dates start as closed folders; tap a date to open or close it. Refreshes and unit changes preserve open folders, including history loaded from earlier pages.
 - Verified touch and keyboard controls, another caregiver's edit, local midnight rollover and a 52-entry day with PocketBase and Chromium. The three web build/cache checks passed.
 
+## v0071 - 2026-11-06
+- Web reminders request the device’s notification sound and use a small monochrome checklist badge for the Android status bar alongside the existing full-color Checky icon.
+- Added a local Test notification button and a downloadable two-note Checky chime in Event reminders. Sound selection and silent modes remain under the device’s control.
+
 desktop:
 
 ## v0001 - 2026-04-07

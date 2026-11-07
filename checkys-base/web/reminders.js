@@ -2,12 +2,30 @@
   let userId = '';
   let busy = false;
   const button = document.getElementById('notificationsToggle');
+  const testButton = document.getElementById('notificationsTest');
   const status = document.getElementById('notificationsStatus');
   const supported = () => window.isSecureContext && 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window;
   const key = () => 'checky-notifications-' + userId;
   const optedIn = () => { try { return localStorage.getItem(key()) === 'on'; } catch (_) { return false; } };
   function remember(enabled) { try { enabled ? localStorage.setItem(key(), 'on') : localStorage.removeItem(key()); } catch (_) {} }
   function message(text) { status.textContent = text; }
+  function refreshButtons() {
+    button.disabled = busy || !userId || !supported();
+    testButton.disabled = button.disabled || Notification.permission !== 'granted';
+  }
+  async function testNotification() {
+    const reg = await registration();
+    if (!reg.active) throw new Error('Notifications are still starting. Please try again.');
+    const channel = new MessageChannel();
+    let timeout;
+    try {
+      await new Promise((resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error('The test did not respond. Check for an app update and try again.')), 8000);
+        channel.port1.onmessage = event => event.data?.ok ? resolve() : reject(new Error('The browser could not show the test. Check notification permissions on this device.'));
+        reg.active.postMessage({ type: 'CHECKY_TEST_REMINDER' }, [channel.port2]);
+      });
+    } finally { clearTimeout(timeout); channel.port1.close(); }
+  }
   async function api(method, body) {
     const response = await fetch('/api/checkys-base/push', {
       method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
@@ -55,14 +73,14 @@
   }
   async function init(id) {
     userId = id || '';
-    button.disabled = !userId || !supported();
+    refreshButtons();
     if (!supported()) {
       message(!window.isSecureContext ? 'Open Checky over HTTPS (or localhost) to enable notifications.' : 'This browser does not support web push here. On iPhone or iPad, add Checky to your Home Screen and open it there.');
       return;
     }
     button.onclick = async () => {
       if (busy) return;
-      busy = true; button.disabled = true;
+      busy = true; refreshButtons();
       try {
         if (optedIn()) await disable();
         else {
@@ -72,7 +90,16 @@
           await enable();
         }
       } catch (error) { message(error.message); }
-      finally { busy = false; button.disabled = false; }
+      finally { busy = false; refreshButtons(); }
+    };
+    testButton.onclick = async () => {
+      if (busy || !userId) return;
+      busy = true; refreshButtons();
+      try {
+        await testNotification();
+        message('Test notification sent to this device.');
+      } catch (error) { message(error.message); }
+      finally { busy = false; refreshButtons(); }
     };
     if (userId && optedIn() && Notification.permission === 'granted') {
       button.textContent = 'Turn off notifications';

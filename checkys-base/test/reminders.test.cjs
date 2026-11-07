@@ -44,6 +44,12 @@ test('service worker displays push after all app windows close and restricts not
   handlers.push({ data: { json: () => ({ body: 'Meeting', tag: 'event', url: '/?reminder=checklists:123' }) }, waitUntil: promise => { pending = promise; } });
   await pending;
   assert.equal(shown[0][1].body, 'Meeting');
+  const notice = shown[0][1];
+  assert.equal(notice.silent, false);
+  assert.equal(notice.renotify, false, 'A retry with the same event tag should not ring twice');
+  assert.equal(notice.tag, 'event');
+  assert.notEqual(notice.icon, notice.badge, 'Masking the opaque app icon would give Android a solid square');
+  for (const asset of [notice.icon, notice.badge]) assert.ok(fs.existsSync(path.join(__dirname, '../web', asset)));
   handlers.notificationclick({ notification: { close() {}, data: shown[0][1].data }, waitUntil: promise => { pending = promise; } });
   await pending;
   assert.equal(opened[0], 'https://checky.example.com/?reminder=checklists:123');

@@ -71,6 +71,24 @@ async function main() {
     await page.locator('#loginOverlay').waitFor({ state: 'hidden' });
     await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
     await page.waitForFunction(() => !!navigator.serviceWorker.controller);
+    await page.locator('#navToggle').click();
+    await page.locator('#settingsToggle').click();
+    // Headless Chromium cannot verify speakers. Capture only the final OS call;
+    // exercise the settings button, actual worker, icon URLs and success/failure reply.
+    const firstWorker = context.serviceWorkers()[0];
+    await firstWorker.evaluate(() => { self.registration.showNotification = async (title, options) => { self.testPreview = {title, options}; }; });
+    await page.locator('#notificationsTest').click();
+    await page.waitForFunction(() => document.getElementById('notificationsStatus').textContent.includes('sent to this device'));
+    const preview = await firstWorker.evaluate(() => self.testPreview);
+    assert.match(preview.title, /test reminder/i);
+    assert.equal(preview.options.silent, false);
+    assert.equal(preview.options.renotify, true, 'Users can retest sound without dismissing the previous preview');
+    await firstWorker.evaluate(() => { self.registration.showNotification = async () => { throw Error('Permission revoked'); }; });
+    await page.locator('#notificationsTest').click();
+    await page.waitForFunction(() => document.getElementById('notificationsStatus').textContent.includes('could not show'));
+    await firstWorker.evaluate(() => { delete self.registration.showNotification; });
+    await page.locator('#specialViewCloseBtn').click();
+    console.log('PASS device-only reminder preview and denied notification feedback');
     await page.evaluate(async () => {
       await caches.open('unrelated-test-cache');
       localStorage.setItem('checky-test-preference', 'keep');
@@ -92,6 +110,11 @@ async function main() {
     assert.equal(await page.locator('#list input[type="checkbox"]').isChecked(), true);
     assert.equal(await page.evaluate(() => state.data.tabs[state.data.active].items[0].reminderCheckedAt), null);
     await page.locator('#list input[type="checkbox"]').uncheck();
+    // Let the first window finish its save before the second starts its own sync.
+    await page.waitForFunction(() => {
+      const meta = JSON.parse(localStorage.getItem('checky.android.syncMeta') || '{}');
+      return !meta.dirty && meta.baseChecklist?.tabs?.[0]?.items?.[0]?.done === false;
+    });
     console.log('PASS repeating checkbox acknowledgement, live automatic reset and permanent Mark done without an archive');
     const other = await context.newPage(); await other.goto(origin);
     await other.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
@@ -141,6 +164,13 @@ async function main() {
     assert.equal(await page.locator('#appUpdateBanner').isVisible(), false);
     await context.setOffline(true);
     await page.reload();
+    const assetsOffline = await page.evaluate(async ({icon, badge}) => {
+      const png = async url => Array.from(new Uint8Array(await (await fetch(url)).arrayBuffer()).slice(0, 4));
+      const tone = await fetch(document.querySelector('a[download="Checky chime.wav"]').href);
+      const wav = new Uint8Array(await tone.arrayBuffer());
+      return [await png(icon), await png(badge), String.fromCharCode(...wav.slice(0, 4), ...wav.slice(8, 12))];
+    }, preview.options);
+    assert.deepEqual(assetsOffline, [[137,80,78,71], [137,80,78,71], 'RIFFWAVE']);
     assert.ok((await page.locator('script[src*="pwa.js"]').getAttribute('src')).includes(versions[1]));
     await page.evaluate(() => document.getElementById('appUpdateCheck').click());
     await page.waitForFunction(() => /offline|connection|connected/.test(document.getElementById('appUpdateStatus').textContent));
