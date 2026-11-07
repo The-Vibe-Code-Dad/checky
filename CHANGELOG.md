@@ -358,6 +358,10 @@ base:
 - Web reminders request the device’s notification sound and use a small monochrome checklist badge for the Android status bar alongside the existing full-color Checky icon.
 - Added a local Test notification button and a downloadable two-note Checky chime in Event reminders. Sound selection and silent modes remain under the device’s control.
 
+## v0072 - 2026-11-06
+- Replaced the reminder preview and instructions in Settings with one Notification settings button. Its panel keeps this device’s enable/disable control and hands enabled users off to system settings on Android and Windows.
+- Removed the test notification handler and the chime download from the settings screen and offline cache.
+
 desktop:
 
 ## v0001 - 2026-04-07

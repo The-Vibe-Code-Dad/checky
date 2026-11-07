@@ -134,6 +134,7 @@ async function main() {
     await page.locator('.title').click();
     await page.locator('#navToggle').click();
     await page.locator('#settingsToggle').click();
+    await page.getByRole('button', { name: 'Notification settings', exact: true }).click();
     await page.evaluate(() => { Notification.requestPermission = async () => 'denied'; });
     await page.locator('#notificationsToggle').click();
     await page.waitForFunction(() => document.getElementById('notificationsStatus').textContent.includes('not allowed'));

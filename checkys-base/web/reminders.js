@@ -2,30 +2,47 @@
   let userId = '';
   let busy = false;
   const button = document.getElementById('notificationsToggle');
-  const testButton = document.getElementById('notificationsTest');
+  const settingsDialog = document.getElementById('notificationSettingsDialog');
   const status = document.getElementById('notificationsStatus');
   const supported = () => window.isSecureContext && 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window;
   const key = () => 'checky-notifications-' + userId;
   const optedIn = () => { try { return localStorage.getItem(key()) === 'on'; } catch (_) { return false; } };
   function remember(enabled) { try { enabled ? localStorage.setItem(key(), 'on') : localStorage.removeItem(key()); } catch (_) {} }
-  function message(text) { status.textContent = text; }
-  function refreshButtons() {
+  function message(text) {
+    status.textContent = text;
+    status.hidden = !text;
+  }
+  function refreshToggle() {
+    button.textContent = optedIn() ? 'Turn off notifications' : 'Enable notifications';
     button.disabled = busy || !userId || !supported();
-    testButton.disabled = button.disabled || Notification.permission !== 'granted';
   }
-  async function testNotification() {
-    const reg = await registration();
-    if (!reg.active) throw new Error('Notifications are still starting. Please try again.');
-    const channel = new MessageChannel();
-    let timeout;
-    try {
-      await new Promise((resolve, reject) => {
-        timeout = setTimeout(() => reject(new Error('The test did not respond. Check for an app update and try again.')), 8000);
-        channel.port1.onmessage = event => event.data?.ok ? resolve() : reject(new Error('The browser could not show the test. Check notification permissions on this device.'));
-        reg.active.postMessage({ type: 'CHECKY_TEST_REMINDER' }, [channel.port2]);
-      });
-    } finally { clearTimeout(timeout); channel.port1.close(); }
+  function openSettings() {
+    const link = document.getElementById('systemNotificationSettings');
+    const path = document.getElementById('systemNotificationPath');
+    const agent = navigator.userAgent;
+    if (/Android/i.test(agent)) {
+      // Android exposes its main Settings activity to browser links.
+      link.href = 'intent:#Intent;action=android.settings.SETTINGS;package=com.android.settings;end';
+      link.textContent = 'Phone settings';
+      link.hidden = false;
+      path.textContent = ' → Notifications → App notifications → Checky or your browser.';
+    } else if (/Windows NT/i.test(agent)) {
+      link.href = 'ms-settings:notifications';
+      link.textContent = 'Open Windows notification settings';
+      link.hidden = false;
+    } else if (/iPhone|iPad|iPod/.test(agent) || (/Macintosh/.test(agent) && navigator.maxTouchPoints > 1)) {
+      path.textContent = 'Settings → Notifications → Checky’s List';
+    } else {
+      path.textContent = 'Manage notification permissions in your browser’s site settings.';
+    }
+    refreshToggle();
+    settingsDialog.showModal();
+    if (!link.hidden && optedIn() && supported() && Notification.permission === 'granted') {
+      // Keep the controls available when the user returns or the browser declines the handoff.
+      link.click();
+    }
   }
+  document.getElementById('notificationSettings').onclick = openSettings;
   async function api(method, body) {
     const response = await fetch('/api/checkys-base/push', {
       method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
@@ -57,8 +74,7 @@
     subscription ||= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: publicKey });
     await api('POST', { subscription: subscription.toJSON() });
     remember(true);
-    button.textContent = 'Turn off notifications';
-    message('Notifications enabled on this browser, including when Checky is closed.');
+    message('');
   }
   async function disable() {
     const reg = await registration();
@@ -68,45 +84,37 @@
       await subscription.unsubscribe();
     }
     remember(false);
-    button.textContent = 'Enable notifications';
-    message('Notifications are off on this browser. Your reminder dates are kept.');
+    message('');
   }
   async function init(id) {
     userId = id || '';
-    refreshButtons();
+    refreshToggle();
     if (!supported()) {
-      message(!window.isSecureContext ? 'Open Checky over HTTPS (or localhost) to enable notifications.' : 'This browser does not support web push here. On iPhone or iPad, add Checky to your Home Screen and open it there.');
+      message(!window.isSecureContext ? 'Open Checky over HTTPS to enable notifications.' : 'Web push is unavailable in this browser.');
       return;
     }
     button.onclick = async () => {
       if (busy) return;
-      busy = true; refreshButtons();
+      busy = true; refreshToggle();
+      message('');
       try {
         if (optedIn()) await disable();
         else {
           // Permission is requested only from this explicit user click.
           const permission = await Notification.requestPermission();
-          if (permission !== 'granted') throw new Error('Notifications were not allowed. You can change this in your browser’s site settings.');
+          if (permission !== 'granted') throw new Error('Notifications were not allowed.');
           await enable();
         }
       } catch (error) { message(error.message); }
-      finally { busy = false; refreshButtons(); }
-    };
-    testButton.onclick = async () => {
-      if (busy || !userId) return;
-      busy = true; refreshButtons();
-      try {
-        await testNotification();
-        message('Test notification sent to this device.');
-      } catch (error) { message(error.message); }
-      finally { busy = false; refreshButtons(); }
+      finally { busy = false; refreshToggle(); }
     };
     if (userId && optedIn() && Notification.permission === 'granted') {
-      button.textContent = 'Turn off notifications';
+      busy = true; refreshToggle();
       try { await enable(); } catch (error) { message(error.message); }
+      finally { busy = false; refreshToggle(); }
     } else {
       remember(false);
-      message('Enable notifications on each browser where you want event reminders.');
+      refreshToggle();
     }
   }
   function edit(item) {

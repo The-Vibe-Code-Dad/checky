@@ -689,9 +689,9 @@ hr{
   }
 }
 
-.reminder-dialog{max-width:440px;width:calc(100% - 32px);box-sizing:border-box;padding:24px;border:1px solid #666;border-radius:12px;background:#20232a;color:#fff;}
-.reminder-dialog::backdrop{background:#0009;}
-.reminder-dialog h2{margin-top:0;}
+.reminder-dialog,#notificationSettingsDialog{max-width:440px;width:calc(100% - 32px);box-sizing:border-box;padding:24px;border:1px solid #666;border-radius:12px;background:#20232a;color:#fff;}
+.reminder-dialog::backdrop,#notificationSettingsDialog::backdrop{background:#0009;}
+.reminder-dialog h2,#notificationSettingsDialog h2{margin-top:0;}
 .reminder-dialog p{overflow-wrap:anywhere;}
 .reminder-dialog input,.reminder-dialog select{display:block;box-sizing:border-box;width:100%;margin:8px 0 16px;padding:10px;background:#17191e;color:#fff;border:1px solid #888;border-radius:6px;color-scheme:dark;}
 .reminder-dialog .inline{display:flex;flex-wrap:wrap;gap:8px;}
