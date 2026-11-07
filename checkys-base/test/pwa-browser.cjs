@@ -90,11 +90,20 @@ async function main() {
     await page.evaluate(() => localStorage.setItem('checky-notifications-' + state.hostedSession.user.id, 'on'));
     await openSettings.click();
     assert.equal(await dialog.getByRole('button', {name:'Turn off notifications'}).isVisible(), true);
-    assert.deepEqual(await page.evaluate(() => window.systemSettingsHandoffs), ['intent:#Intent;action=android.settings.SETTINGS;package=com.android.settings;end']);
+    assert.deepEqual(await page.evaluate(() => window.systemSettingsHandoffs), [], 'Opening the dialog should never launch system settings');
+    await dialog.getByRole('link', {name: 'Open notification settings'}).click();
+    const fallbackUrl = new URL('#systemNotificationPath', page.url()).href;
+    assert.deepEqual(await page.evaluate(() => window.systemSettingsHandoffs), [
+      'intent:#Intent;action=android.settings.NOTIFICATION_SETTINGS;package=com.android.settings;' +
+        'S.browser_fallback_url=' + encodeURIComponent(fallbackUrl) + ';end'
+    ]);
+    await page.goto(fallbackUrl);
+    assert.equal(await dialog.isVisible(), true, 'The browser fallback should keep the dialog open');
+    assert.match(await dialog.locator('#systemNotificationPath').innerText(), /Settings → Notifications/);
     await page.keyboard.press('Escape');
     assert.equal(await openSettings.evaluate(el => el === document.activeElement), true);
     await page.locator('#specialViewCloseBtn').click();
-    console.log('PASS compact notification settings, opt-in, Android Settings handoff and keyboard return');
+    console.log('PASS notification dialog, explicit Android notification link, same-page fallback and keyboard return');
     await page.evaluate(async () => {
       await caches.open('unrelated-test-cache');
       localStorage.setItem('checky-test-preference', 'keep');
