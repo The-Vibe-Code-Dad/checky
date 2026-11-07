@@ -7,6 +7,7 @@
   document.body.classList.toggle('embedded', embedded);
   const notifyLists = () => { if (embedded) parent.postMessage({ type: 'checky-addon-lists-changed' }, location.origin); };
   let user, lists = [], entries = [], current = '', more = false, loading = false, saving = false;
+  let renderedDay, pagesLoaded = 1;
   let editing = null, requestId = '', dirty = false, canonical = {}, unit = 'ml', editorUnit = 'ml';
   function status(message, error = false) { $('status').textContent = message; $('status').classList.toggle('error', error); }
   async function api(path, method = 'GET', body) {
@@ -26,7 +27,8 @@
   function fail(error) {
     status(error.message, true);
     if (error.status === 401 || error.status === 403 || error.status === 404) {
-      entries = []; $('entries').replaceChildren(); $('tracker').hidden = true; notifyLists();
+      entries = []; renderedDay = undefined; pagesLoaded = 1;
+      $('entries').replaceChildren(); $('tracker').hidden = true; notifyLists();
       if (error.status === 401) { user = null; $('login').hidden = false; }
     }
   }
@@ -35,7 +37,6 @@
   function controls() {
     $('addEntry').disabled = loading || !activeList()?.writable;
     $('listPicker').disabled = loading;
-    $('refresh').disabled = loading;
     $('loadMore').disabled = loading;
   }
   function node(tag, className, text) {
@@ -44,61 +45,92 @@
     if (text !== undefined) element.textContent = text;
     return element;
   }
-  function render() {
-    $('entries').replaceChildren();
-    $('loadMore').hidden = !more;
-    if (!entries.length) $('entries').append(node('p', 'empty', 'No entries yet. Add a feeding, diaper change or note.'));
-    let lastMonth = '', lastDay = '';
-    for (const record of entries) {
-      const data = record.entry;
-      const date = new Date(data.occurredAt);
-      const month = date.getFullYear() + '-' + date.getMonth();
-      const day = month + '-' + date.getDate();
-      if (month !== lastMonth) {
-        $('entries').append(node('h2', 'archive-month', date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })));
-        lastMonth = month;
-      }
-      if (day !== lastDay) {
-        $('entries').append(node('h3', 'archive-day', date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })));
-        lastDay = day;
-      }
-      const card = node('article', 'entry');
-      const heading = node('div', 'entry-heading');
-      const time = node('time', '', date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }));
-      time.dateTime = data.occurredAt;
-      const timestamp = date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-      time.title = timestamp;
-      const edit = node('button', '', 'Edit'); edit.type = 'button'; edit.disabled = !activeList()?.writable;
-      edit.setAttribute('aria-label', 'Edit entry from ' + timestamp);
-      edit.onclick = () => openEditor(record);
-      heading.append(time, edit); card.append(heading);
-      const feeding = node('div', 'feed-summary');
-      for (const [key, label] of [['breastMilkMl', 'Breast milk'], ['formulaMl', 'Formula']]) {
-        const value = node('div', 'feed-value');
-        value.append(node('span', '', label), node('strong', '', data[key] === null ? '—' : amounts.fromMl(data[key], unit) + ' ' + unit));
-        feeding.append(value);
-      }
-      card.append(feeding);
-      if (data.feedingNotes) card.append(node('p', 'notes', data.feedingNotes));
-      for (const [key, label] of [['pee', 'Pee'], ['poop', 'Poop']]) {
-        const row = node('div', 'diaper-summary');
-        const checkLabel = node('label', 'check');
-        const check = node('input'); check.type = 'checkbox'; check.checked = data[key]; check.disabled = true;
-        checkLabel.append(check, document.createTextNode(label));
-        row.append(checkLabel, node('p', 'notes', data[key + 'Notes'] || '—')); card.append(row);
-      }
-      $('entries').append(card);
+  function entryCard(record) {
+    const data = record.entry, date = new Date(data.occurredAt);
+    const card = node('article', 'entry');
+    const heading = node('div', 'entry-heading');
+    const time = node('time', '', date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }));
+    time.dateTime = data.occurredAt;
+    const timestamp = date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    time.title = timestamp;
+    const edit = node('button', '', 'Edit'); edit.type = 'button'; edit.disabled = !activeList()?.writable;
+    edit.setAttribute('aria-label', 'Edit entry from ' + timestamp);
+    edit.onclick = () => openEditor(record);
+    heading.append(time, edit); card.append(heading);
+    const feeding = node('div', 'feed-summary');
+    for (const [key, label] of [['breastMilkMl', 'Breast milk'], ['formulaMl', 'Formula']]) {
+      const value = node('div', 'feed-value');
+      value.append(node('span', '', label), node('strong', '', data[key] === null ? '—' : amounts.fromMl(data[key], unit) + ' ' + unit));
+      feeding.append(value);
     }
+    card.append(feeding);
+    if (data.feedingNotes) card.append(node('p', 'notes', data.feedingNotes));
+    for (const [key, label] of [['pee', 'Pee'], ['poop', 'Poop']]) {
+      const row = node('div', 'diaper-summary');
+      const checkLabel = node('label', 'check');
+      const check = node('input'); check.type = 'checkbox'; check.checked = data[key]; check.disabled = true;
+      checkLabel.append(check, document.createTextNode(label));
+      row.append(checkLabel, node('p', 'notes', data[key + 'Notes'] || '—')); card.append(row);
+    }
+    return card;
   }
-  async function load(append = false, quiet = false) {
+  const localDay = value => new Date(value).setHours(0, 0, 0, 0);
+  function render() {
+    const log = $('entries');
+    const openDays = new Set(Array.from(log.querySelectorAll('details[open]'), el => el.dataset.day));
+    const focusedDay = document.activeElement?.closest('summary')?.parentElement.dataset.day;
+    renderedDay = localDay(Date.now());
+    const days = new Map([[renderedDay, []]]);
+    for (const record of entries) {
+      const day = localDay(record.entry.occurredAt);
+      if (!days.has(day)) days.set(day, []);
+      days.get(day).push(record);
+    }
+    const fragment = document.createDocumentFragment();
+    for (const day of [...days.keys()].sort((a, b) => b - a)) {
+      const date = new Date(day);
+      const label = date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric',
+        year: date.getFullYear() === new Date(renderedDay).getFullYear() ? undefined : 'numeric' });
+      const today = day === renderedDay;
+      const group = node(today ? 'section' : 'details', today ? 'today' : 'day-folder');
+      if (today) {
+        const heading = node('h2', 'today-heading', 'Today ');
+        heading.append(node('small', '', label)); group.append(heading);
+        if (!days.get(day).length) group.append(node('p', 'empty', entries.length ? 'No entries today.' : 'No entries yet. Add a feeding, diaper change or note.'));
+      } else {
+        group.dataset.day = String(day);
+        group.open = openDays.has(group.dataset.day);
+        group.append(node('summary', '', label));
+      }
+      for (const record of days.get(day)) group.append(entryCard(record));
+      fragment.append(group);
+    }
+    log.replaceChildren(fragment);
+    if (focusedDay) log.querySelector('details[data-day="' + focusedDay + '"] summary')?.focus({ preventScroll: true });
+    $('loadMore').hidden = !more;
+  }
+  async function load(append = false) {
     if (loading || !current) return;
     loading = true; controls();
     try {
-      const cursor = append && entries.length ? '&before=' + encodeURIComponent(entries.at(-1).id) : '';
-      const result = await api(apiRoot + '/entries?list=' + encodeURIComponent(current) + cursor);
-      entries = append ? [...entries, ...result.items.filter(item => !entries.some(old => old.id === item.id))] : result.items;
-      more = result.more; render();
-      if (!quiet) status('Up to date. Grouped by day, newest first.');
+      // Refresh the pages already on screen so polling doesn't close older history.
+      const next = append ? [...entries] : [];
+      const seen = new Set(next.map(record => record.id));
+      let pages = append ? pagesLoaded : 0, hasMore;
+      do {
+        const cursor = next.length ? '&before=' + encodeURIComponent(next.at(-1).id) : '';
+        const result = await api(apiRoot + '/entries?list=' + encodeURIComponent(current) + cursor);
+        for (const item of result.items) {
+          if (!seen.has(item.id)) { next.push(item); seen.add(item.id); }
+        }
+        pages++;
+        hasMore = result.more;
+      } while (!append && hasMore && pages < pagesLoaded);
+      const changed = more !== hasMore || renderedDay !== localDay(Date.now()) || entries.length !== next.length ||
+        next.some((item, i) => entries[i].id !== item.id || entries[i].version !== item.version);
+      entries = next; pagesLoaded = pages; more = hasMore;
+      if (changed) render();
+      status('');
     } finally { loading = false; controls(); }
   }
   async function start() {
@@ -126,7 +158,6 @@
   function updateScope() {
     $('tracker').hidden = !activeList();
     $('listPicker').value = current;
-    $('sharingHint').textContent = 'Shared only with caregivers assigned to this baby list in PocketBase.';
     document.querySelector('h1').textContent = activeList()?.name || 'Baby tracker';
     const address = new URL(location.href);
     if (current) address.searchParams.set('list', current); else address.searchParams.delete('list');
@@ -202,8 +233,11 @@
       if (!deleting) entries.push(record);
       entries.sort((a, b) => b.entry.occurredAt.localeCompare(a.entry.occurredAt) || b.id.localeCompare(a.id));
       dirty = false; $('editor').close(); render();
-      status(deleting ? 'Entry deleted.' : 'Entry saved and shared with this baby list.');
-      try { await load(false, true); } catch (_) { status('Saved. Refresh when your connection returns to see the latest log.'); }
+      try { await load(); status(deleting ? 'Entry deleted.' : 'Entry saved.'); }
+      catch (error) {
+        if ([401, 403, 404].includes(error.status)) fail(error);
+        else status('Change saved. Could not refresh the log.', true);
+      }
     } catch (error) {
       $('editorError').textContent = error.status === 401 ? 'Your session expired. Your changes are still here; sign in to Checky in another tab, then try saving again.' : error.message;
     } finally { editorBusy(false); }
@@ -215,8 +249,10 @@
       await api('/api/checkys-base/session/login', 'POST', { token: result.token }); $('password').value = ''; await start();
     } catch (error) { fail(error); } finally { button.disabled = false; }
   };
-  $('listPicker').onchange = async () => { current = $('listPicker').value; entries = []; more = false; render(); updateScope(); try { await load(); } catch (error) { fail(error); } };
-  $('refresh').onclick = () => load().catch(fail);
+  $('listPicker').onchange = async () => {
+    current = $('listPicker').value; entries = []; more = false; pagesLoaded = 1;
+    render(); updateScope(); try { await load(); } catch (error) { fail(error); }
+  };
   $('loadMore').onclick = () => load(true).catch(fail);
   $('addEntry').onclick = () => openEditor(null);
   $('units').onchange = () => { unit = $('units').value; try { localStorage.setItem(preferenceKey(), unit); } catch (_) {} render(); };
@@ -230,8 +266,49 @@
     if ($('deleteEntry').textContent !== 'Confirm delete') { $('deleteEntry').textContent = 'Confirm delete'; return; }
     void save(true);
   };
+  // The embedded log has its own scrolling document; its touches don't reach
+  // the checklist's pull handler. Match its 84px threshold and drag resistance.
+  const indicator = $('pullIndicator');
+  let pull = null;
+  function showPull(label, height = 0) {
+    indicator.firstElementChild.textContent = label;
+    indicator.style.height = height + 'px';
+  }
+  function cancelPull() {
+    if (!pull) return;
+    pull = null; showPull('');
+  }
+  function canPull() {
+    return !$('tracker').hidden && !$('editor').open && !loading && !saving && document.scrollingElement.scrollTop <= 0;
+  }
+  document.addEventListener('touchstart', event => {
+    cancelPull();
+    if (!canPull() || event.touches.length !== 1 || event.target.closest('button, input, select, textarea, label, a, dialog')) return;
+    const touch = event.touches[0];
+    pull = { id: touch.identifier, x: touch.clientX, y: touch.clientY, ready: false };
+  }, { passive: true });
+  document.addEventListener('touchmove', event => {
+    if (!pull) return;
+    const touch = event.touches[0];
+    if (!canPull() || event.touches.length !== 1 || touch.identifier !== pull.id) return cancelPull();
+    const dy = touch.clientY - pull.y, dx = Math.abs(touch.clientX - pull.x);
+    if (dy < 0 || (dx > 8 && dx > dy)) return cancelPull();
+    pull.ready = dy >= 84;
+    if (dy < 8 && !indicator.offsetHeight) return;
+    if (event.cancelable) event.preventDefault();
+    showPull(pull.ready ? 'Release to refresh' : 'Pull down to refresh', Math.min(108, dy * 0.6));
+  }, { passive: false });
+  document.addEventListener('touchcancel', cancelPull);
+  document.addEventListener('touchend', async event => {
+    if (!pull) return;
+    const refresh = pull.ready && canPull() && !event.touches.length && event.changedTouches[0]?.identifier === pull.id;
+    cancelPull();
+    if (!refresh) return;
+    showPull('Refreshing…', 52);
+    try { await load(); } catch (error) { fail(error); } finally { showPull(''); }
+  });
   window.addEventListener('beforeunload', event => { if (dirty || saving) { event.preventDefault(); event.returnValue = ''; } });
-  const refreshIfIdle = () => { if (user && current && !$('editor').open && !document.hidden) load(false, true).catch(fail); };
+  const refreshIfIdle = () => { if (user && current && !$('editor').open && !saving && !document.hidden) load().catch(fail); };
   window.addEventListener('online', refreshIfIdle);
   document.addEventListener('visibilitychange', refreshIfIdle);
   setInterval(refreshIfIdle, 30000);

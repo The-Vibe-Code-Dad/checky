@@ -349,6 +349,11 @@ base:
 ## v0069 - 2026-11-05
 - Fixed the menu browser test's startup race: wait for the initial sync to finish before holding a tab, preventing the scheduled sync from rebuilding controls mid-gesture on faster CI runners. Kept all menu, touch, archive and publication checks enabled.
 
+## v0070 - 2026-11-06
+- Cleaned up the Baby log toolbar and replaced the Refresh button, routine sync message and sharing notice with pull-to-refresh at the top of the log.
+- Today's entries stay open. Older local dates start as closed folders; tap a date to open or close it. Refreshes and unit changes preserve open folders, including history loaded from earlier pages.
+- Verified touch and keyboard controls, another caregiver's edit, local midnight rollover and a 52-entry day with PocketBase and Chromium. The three web build/cache checks passed.
+
 desktop:
 
 ## v0001 - 2026-04-07

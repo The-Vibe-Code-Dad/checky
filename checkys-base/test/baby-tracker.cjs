@@ -150,6 +150,8 @@ async function main() {
     const parent = await req('/api/collections/shared_checklists/records/' + shared.id, 'GET', undefined, admin.token);
     assert.equal(parent.data.tabs[0].items[0].text, 'Keep regular tasks'); assert.equal(parent.version, 1);
     console.log('PASS independent list access, validation, idempotent saves, conflict protection, stable pagination and unchanged checklist JSON');
+    const yesterday = await req(endpoint, 'POST', { list: ref, requestId: crypto.randomUUID(),
+      entry: { ...seed, occurredAt: '2026-11-05T04:45:00.000Z', feedingNotes: 'Before local midnight' } }, tokens[0]);
 
     const root = path.join(dir, 'web');
     await fs.cp(path.join(__dirname, '../web'), root, { recursive: true, filter: source => path.basename(source) !== 'desktop-updates' });
@@ -174,6 +176,7 @@ async function main() {
     const context = await browser.newContext({ viewport: { width: 1100, height: 900 }, hasTouch: true, timezoneId: 'America/New_York', locale: 'en-US' });
     await context.addInitScript(() => Object.defineProperty(crypto, 'randomUUID', { value: undefined }));
     const page = await context.newPage(), errors = []; page.on('pageerror', error => errors.push(error.message));
+    await page.clock.setFixedTime(new Date('2026-11-05T17:00:00Z'));
     await page.goto(origin);
     await page.locator('#loginEmailInput').fill(users[0].email); await page.locator('#loginPasswordInput').fill(password); await page.locator('#loginSubmitBtn').click();
     await page.locator('#loginOverlay').waitFor({ state: 'hidden' });
@@ -219,6 +222,11 @@ async function main() {
     assert.equal(await tracker.getByRole('link', {name:'Back to lists'}).count(), 0);
     assert.equal(await tracker.locator('#listPicker').inputValue(), ref);
     assert.equal(await tracker.locator('#manageLists').isVisible(), false);
+    if (process.env.CHECKY_SCREENSHOT_DIR) {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.screenshot({ path: path.join(process.env.CHECKY_SCREENSHOT_DIR, 'baby-day-folders-phone.png') });
+      await page.setViewportSize({ width: 1100, height: 900 });
+    }
     await tracker.locator('#addEntry').click();
     assert.equal(await tracker.locator('#occurredAt').inputValue().then(value => value.length), 16);
     await tracker.locator('#saveEntry').click(); assert.match(await tracker.locator('#editorError').textContent(), /Add a feeding/);
@@ -236,9 +244,19 @@ async function main() {
     assert.ok(saved); assert.equal(saved.entry.occurredAt, '2026-11-05T15:15:00.000Z'); assert.equal(saved.entry.breastMilkMl, 60); assert.equal(saved.entry.formulaMl, 30);
     await page.reload(); await tracker.locator('.entry').first().waitFor();
     assert.match(await tracker.locator('#entries').textContent(), /Settled well <script>bad\(\)<\/script>/);
-    assert.deepEqual(await tracker.locator('.archive-month').allTextContents(), ['November 2026']);
-    assert.deepEqual(await tracker.locator('.archive-day').allTextContents(), ['Thursday, November 5']);
+    assert.match(await tracker.locator('.today-heading').innerText(), /Today\s+Thursday, November 5/);
+    assert.equal(await tracker.locator('.today .entry:visible').count(), 2);
+    assert.equal(await tracker.locator('#status').isVisible(), false);
+    assert.equal(await tracker.getByRole('button', {name:'Refresh', exact:true}).count(), 0);
+    const historicalEntry = tracker.getByText('Before local midnight', {exact:true});
+    const olderDay = tracker.locator('summary', {hasText:'Wednesday, November 4'});
+    assert.equal(await historicalEntry.isVisible(), false);
+    await olderDay.tap(); await historicalEntry.waitFor();
+    await olderDay.focus(); await olderDay.press('Enter');
+    await historicalEntry.waitFor({state:'hidden'});
+    await olderDay.tap(); await historicalEntry.waitFor();
     await tracker.locator('#units').selectOption('oz');
+    assert.equal(await historicalEntry.isVisible(), true);
     await tracker.locator('.entry').first().getByRole('button', { name: /Edit entry/ }).click();
     await tracker.locator('#formula').fill('2'); await tracker.locator('#poop').check(); await tracker.locator('#poopNotes').fill('Changed diaper');
     await tracker.locator('#occurredAt').fill('2026-11-05T10:20');
@@ -263,7 +281,25 @@ async function main() {
     await tracker.locator('#saveEntry').click(); await tracker.getByText('Another caregiver changed this entry.', { exact: false }).waitFor();
     assert.equal(await tracker.locator('#feedingNotes').inputValue(), 'My unsaved draft');
     page.once('dialog', dialog => dialog.accept()); await tracker.locator('#cancel').click();
-    await tracker.locator('#refresh').click(); await tracker.getByText('Other caregiver edit', { exact: true }).waitFor();
+    // Real finger gestures in the embedded phone view. A short pull cancels;
+    // releasing a full pull fetches the edit without closing yesterday.
+    await tracker.locator('h1').evaluate(el => el.ownerDocument.defaultView.scrollTo(0, 0));
+    const title = await tracker.locator('h1').boundingBox();
+    async function pullLog(distance, expectedHint) {
+      const point = {x:title.x + 16, y:title.y + 8};
+      await touch.send('Input.dispatchTouchEvent', {type:'touchStart', touchPoints:[point]});
+      await touch.send('Input.dispatchTouchEvent', {type:'touchMove', touchPoints:[{...point, y:point.y + distance}]});
+      await tracker.getByText(expectedHint, {exact:true}).waitFor();
+      await touch.send('Input.dispatchTouchEvent', {type:'touchEnd', touchPoints:[]});
+    }
+    await pullLog(38, 'Pull down to refresh');
+    assert.equal(await tracker.getByText('Other caregiver edit', {exact:true}).count(), 0);
+    await pullLog(110, 'Release to refresh');
+    await tracker.getByText('Other caregiver edit', { exact: true }).waitFor();
+    assert.equal(await historicalEntry.isVisible(), true);
+    assert.equal(await tracker.locator('.today .entry:visible').count(), 2);
+    await req(endpoint + '/' + yesterday.id, 'DELETE', {version:yesterday.version}, tokens[0]);
+    console.log('PASS local-day folders, touch/keyboard toggles, short-pull cancellation and pull-to-refresh with history open');
     // Offline save leaves the form intact and never reports success.
     await tracker.locator('#addEntry').click(); await tracker.locator('#pee').check();
     await context.setOffline(true); await tracker.locator('#saveEntry').click();
@@ -292,6 +328,31 @@ async function main() {
     assert.equal(new URL(page.url()).searchParams.has('addon'), false);
     await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
     assert.equal((await req(endpoint + '?list=' + ref, 'GET', undefined, tokens[1])).items.length, 1);
+    // A day can span two server pages. After midnight it should become a
+    // closed folder, and refreshing it must include edits beyond page one.
+    const historyPage = await context.newPage();
+    await historyPage.clock.setFixedTime(new Date('2026-11-05T17:00:00Z'));
+    await historyPage.goto(origin + '/baby/?list=' + encodeURIComponent(personal));
+    await historyPage.locator('.today .entry').first().waitFor();
+    assert.equal(await historyPage.locator('.today .entry').count(), 50);
+    await historyPage.locator('#loadMore').click();
+    await historyPage.locator('#loadMore').waitFor({state:'hidden'});
+    assert.equal(await historyPage.locator('.today .entry').count(), 52);
+    await historyPage.clock.setFixedTime(new Date('2026-11-06T05:01:00Z'));
+    await historyPage.evaluate(() => window.dispatchEvent(new Event('online')));
+    await historyPage.getByText('No entries today.').waitFor();
+    assert.equal(await historyPage.locator('details[open]').count(), 0);
+    await historyPage.getByText('Thursday, November 5', {exact:true}).click();
+    assert.equal(await historyPage.locator('details[open] .entry').count(), 52);
+    const tail = second.items.at(-1);
+    await req(endpoint + '/' + tail.id, 'PATCH', {version:tail.version, entry:{...tail.entry, feedingNotes:'Updated older feeding'}}, tokens[0]);
+    await historyPage.evaluate(() => window.dispatchEvent(new Event('online')));
+    await historyPage.getByText('Updated older feeding', {exact:true}).waitFor();
+    await historyPage.locator('#listPicker').selectOption(ref);
+    await historyPage.getByText('Thursday, November 5', {exact:true}).waitFor();
+    assert.equal(await historyPage.locator('details[open]').count(), 0, 'Folders start closed when switching lists');
+    await historyPage.close();
+    console.log('PASS midnight rollover, cross-page day folders and refresh of earlier pages');
     // PocketBase superusers use the native collection API behind their dashboard.
     // A Checky first-user/admin account has the same assignment rules as everyone.
     const adminContext = await browser.newContext({viewport:{width:1100,height:900}});
@@ -330,7 +391,7 @@ async function main() {
     assert.equal(await adminPin.textContent(),'Renamed in PocketBase', 'Pinned labels follow the current list name');
     await adminPage.locator('#navCloseBtn').click();
     await req(listRecords + '/' + independent.id,'PATCH',{name:'Renamed in PocketBase',members:[users[2].id]},secondAdmin.token);
-    await assigned.locator('#refresh').click();
+    await assigned.locator('body').evaluate(el => el.ownerDocument.dispatchEvent(new Event('visibilitychange')));
     await assigned.locator('#tracker').waitFor({state:'hidden'});
     await assigned.getByText('This baby list is unavailable.',{exact:false}).waitFor();
     await adminPage.locator('#navToggle').click();
