@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="./baby.css?v=__CHECKY_BUILD__">
 </head>
 <body>
+  <div id="pullIndicator" aria-hidden="true"><span></span></div>
   <main>
     <header class="app-header">
       <a class="brand" href="../"><img src="../logo.png" alt="">Checky's List</a>
@@ -29,14 +30,10 @@
     <p id="status" role="status" aria-live="polite">Opening your log…</p>
 
     <section id="tracker" hidden>
-      <div class="list-picker">
-        <label>Baby list<select id="listPicker" aria-describedby="sharingHint"></select></label>
-        <button id="refresh" type="button">Refresh</button>
-      </div>
-      <p id="sharingHint" class="hint"></p>
+      <label class="list-picker">Baby list<select id="listPicker"></select></label>
       <div class="toolbar">
         <button id="addEntry" type="button" class="primary">+ Add entry</button>
-        <label class="unit-label">Show amounts in<select id="units"><option value="ml">ml</option><option value="oz">oz (US fl oz)</option></select></label>
+        <label class="unit-label">Units<select id="units"><option value="ml">ml</option><option value="oz">oz (US fl oz)</option></select></label>
       </div>
       <div id="entries" aria-label="Baby log"></div>
       <button id="loadMore" type="button" hidden>Load earlier entries</button>

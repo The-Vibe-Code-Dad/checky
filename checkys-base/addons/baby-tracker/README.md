@@ -37,7 +37,9 @@ To update an installed add-on, update both optional images together. Updating to
 
 ## Tracking and sharing
 
-The integrated baby log groups entries under month and day headings like the Done tab, with the newest days and times first. Dates use this device's local time; editing an entry's date moves it to the matching day. The log refreshes every 30 seconds while no entry form is open. Add entry fills in the current date/time, which can be edited. Entries have breast milk and formula amounts, feeding notes, and separate pee/poop checkboxes with notes. Display amounts in ml or **US fluid ounces**; stored ml values retain their precision when switching units.
+Today's entries stay open, newest first. Tap an older date to open or close its entries. Dates use this device's local time; editing an entry's date moves it to the matching day. Pull down from the top of the log to refresh. It also refreshes every 30 seconds while no entry form is open.
+
+Add entry fills in the current date/time, which can be edited. Entries have breast milk and formula amounts, feeding notes, and separate pee/poop checkboxes with notes. Display amounts in ml or **US fluid ounces**; stored ml values retain their precision when switching units.
 
 Manage access in the **PocketBase admin dashboard** with a PocketBase superuser account:
 

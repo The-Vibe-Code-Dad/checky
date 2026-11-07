@@ -1,5 +1,6 @@
 :root{color-scheme:dark;--bg:#1f1f1f;--panel:#292929;--border:#474747;--text:#f4f4f4;--muted:#c0c0c0;--accent:#4f7cff}
 *{box-sizing:border-box}
+html,body{overscroll-behavior-y:contain}
 body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 "Segoe UI",Arial,sans-serif}
 main{max-width:760px;margin:auto;padding:18px 18px calc(36px + env(safe-area-inset-bottom))}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -20,21 +21,27 @@ h2{font-size:20px;margin:0}
 label{display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:600;min-width:0}
 input:not([type=checkbox]),select,textarea{width:100%;min-width:0;background:#202020;border:1px solid var(--border);border-radius:8px;padding:10px;min-height:44px}
 textarea{resize:vertical;white-space:pre-wrap}
-.list-picker{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:end}
 .hint{font-size:13px;color:var(--muted);margin:8px 0 18px}
-.toolbar{display:flex;justify-content:space-between;align-items:end;gap:12px;margin:24px 0 20px}
-.unit-label{font-size:12px}
+.toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:16px 0}
+.unit-label{flex-direction:row;align-items:center;color:var(--muted);font-size:13px}
+.unit-label select{width:auto;color:var(--text)}
 #status{font-size:14px;color:var(--muted);min-height:21px}
 #status.error,#editorError{color:#ffb2b2}
 #status:empty,#editorError:empty{display:none}
-.embedded .app-header,.embedded .intro,.embedded .list-picker label{display:none}
+.embedded .app-header,.embedded .intro,.embedded .list-picker{display:none}
 .embedded main{max-width:none;padding:12px 12px 28px}
 .embedded h1{font-size:24px}
-.embedded .list-picker{display:flex;justify-content:flex-end}
-.embedded .list-picker button{padding:6px 12px}
-.archive-month{margin:24px 0 8px;font-size:16px;font-weight:700;color:#d7dfef}
-.archive-day{margin:18px 0 6px;font-size:14px;font-weight:600;color:#9eb2d4}
-.entry{padding:18px;background:var(--panel);border:1px solid var(--border);border-radius:12px;margin:12px 0}
+#pullIndicator{position:fixed;inset:0 0 auto;height:0;z-index:1;overflow:hidden;pointer-events:none;display:grid;justify-items:center;align-items:end}
+#pullIndicator span{border:1px solid var(--border);border-radius:999px;background:#343434;padding:6px 14px;font-size:13px}
+#entries{display:grid;gap:8px}
+.today-heading{display:flex;align-items:baseline;flex-wrap:wrap;gap:5px 10px;padding-top:10px;border-top:1px solid var(--border);font-size:18px}
+.today-heading small{font-size:14px;font-weight:400;color:var(--muted)}
+.day-folder{border:1px solid var(--border);border-radius:9px;background:var(--panel)}
+.day-folder summary{padding:12px;min-height:44px;font-weight:600;cursor:pointer}
+.day-folder summary::marker{color:#9eb2d4}
+.day-folder[open] summary{border-bottom:1px solid var(--border)}
+.day-folder .entry{margin:8px}
+.entry{padding:18px;background:var(--panel);border:1px solid var(--border);border-radius:12px;margin:8px 0 0}
 .entry-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
 .entry-heading time{font-weight:700}
 .feed-summary{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -47,7 +54,8 @@ textarea{resize:vertical;white-space:pre-wrap}
 .check{display:flex;flex-direction:row;align-items:center;gap:8px;min-height:44px;font-size:15px}
 input[type=checkbox]{width:21px;height:21px;accent-color:var(--accent);margin:0;flex-shrink:0}
 .diaper-summary input:disabled{opacity:1}
-.empty{border:1px dashed var(--border);border-radius:12px;padding:32px 20px;text-align:center;color:var(--muted)}
+.empty{margin:6px 0 10px;color:var(--muted);font-size:14px}
+#loadMore{margin-top:12px}
 #login{max-width:420px;background:var(--panel);padding:22px;border-radius:12px}
 #login label{margin:16px 0}
 dialog{width:min(600px,calc(100% - 24px));max-height:calc(100dvh - 24px);padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--panel);color:var(--text);overflow:auto}
