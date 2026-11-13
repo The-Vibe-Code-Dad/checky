@@ -57,6 +57,46 @@ test('service worker displays push after all app windows close and restricts not
 });
 module.exports = { subscription };
 
+test('early-check prompt follows today in the reminder timezone, selected days and calendar boundaries', () => {
+  const { hasReminderLaterToday } = require('../web/reminder-state.js');
+  const item = { reminderAt: '2030-03-09T14:00:00Z', reminderRepeat: 'daily', reminderTimeZone: 'America/New_York' };
+  const check = (now, expected, extra = {}) => assert.equal(hasReminderLaterToday({ ...item, ...extra }, Date.parse(now)), expected, JSON.stringify({ now, extra }));
+  check('2030-03-10T10:00:00Z', true);
+  check('2030-03-10T13:00:00Z', false);
+  check('2030-03-10T14:00:00Z', false);
+  check('2030-03-08T10:00:00Z', false, { reminderAt: '2030-03-09T14:00:00Z' });
+  check('2030-03-09T10:00:00Z', true);
+  check('2030-03-10T10:00:00Z', true, { reminderRepeat: 'weekly', reminderDays: [0, 3] });
+  check('2030-03-10T10:00:00Z', false, { reminderRepeat: 'weekly', reminderDays: [1, 3] });
+  check('2030-03-10T10:00:00Z', false, { reminderRepeat: 'weekly' });
+  check('2030-03-10T10:00:00Z', false, { reminderRepeat: 'none' });
+  check('2030-03-10T10:00:00Z', false, { reminderTimeZone: 'Invalid/Zone' });
+  check('2030-02-28T10:00:00Z', true, { reminderAt: '2030-01-31T14:00:00Z', reminderRepeat: 'monthly' });
+  check('2030-03-30T10:00:00Z', false, { reminderAt: '2030-01-31T14:00:00Z', reminderRepeat: 'monthly' });
+  check('2029-02-28T10:00:00Z', true, { reminderAt: '2028-02-29T14:00:00Z', reminderRepeat: 'yearly' });
+  check('2029-03-29T10:00:00Z', false, { reminderAt: '2028-02-29T14:00:00Z', reminderRepeat: 'yearly' });
+  check('2030-03-10T05:00:00Z', false, { reminderAt: '2030-03-09T07:30:00Z' }); // DST gap
+  check('2026-11-01T04:00:00Z', true, { reminderAt: '2026-10-31T05:30:00Z' });
+  check('2026-11-01T06:00:00Z', false, { reminderAt: '2026-10-31T05:30:00Z' }); // no second fall-back reminder
+  check('2030-01-02T22:00:00Z', true, { reminderAt: '2030-01-01T00:30:00Z', reminderTimeZone: 'Asia/Tokyo' }); // local Jan 3
+});
+
+test('skip today is cleared by unchecking and protects reset metadata from stale sync replies', () => {
+  const { setChecked, mergeResetTimes } = require('../web/reminder-state.js');
+  const item = { id: 'early', reminderAt: '2030-01-01T09:00:00Z', reminderRepeat: 'daily', reminderTimeZone: 'UTC' };
+  const now = Date.parse('2030-01-02T06:00:00Z');
+  setChecked(item, true, now, true);
+  assert.equal(item.reminderSkipToday, true);
+  const checklist = value => ({ tabs: [{ id: 'tab', items: [value] }] });
+  assert.equal(mergeResetTimes(checklist(item), checklist({ ...item, reminderSkipToday: false, reminderResetAt: '2030-01-02T09:00:00Z' })), false);
+  assert.equal(item.reminderResetAt, null);
+  setChecked(item, false, now);
+  assert.equal(item.reminderSkipToday, false);
+  assert.equal(item.reminderCheckedAt, null);
+  setChecked(item, true, now);
+  assert.equal(item.reminderSkipToday, false);
+});
+
 test('a repeating check expires for the next occurrence; Mark done and one-off checks stay completed', () => {
   const { isChecked, setChecked, mergeResetTimes } = require('../web/reminder-state.js');
   const item = { id: 'item', reminderAt: '2030-01-01T09:00:00.000Z', reminderRepeat: 'daily', reminderTimeZone: 'UTC', reminderDays: null };

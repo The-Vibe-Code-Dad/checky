@@ -35,6 +35,7 @@ jobs:
           node --test checkys-app/test/security.test.cjs
           node --test checkys-base/test/desktop-release.test.cjs
           node --test checkys-base/test/pwa.test.cjs
+          node --test checkys-base/test/sync-merge.test.cjs
           npm ci --prefix checkys-base/pocketbase/push --ignore-scripts --no-audit --no-fund
           node --test checkys-base/test/reminders.test.cjs
       - name: Test fresh backend and real Base/desktop sync

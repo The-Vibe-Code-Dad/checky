@@ -66,7 +66,7 @@ async function checkDoneArchive(page, browser, origin, password) {
     await fresh.locator('#loginPasswordInput').fill(password);
     await fresh.locator('#loginSubmitBtn').click();
     await fresh.locator('#loginOverlay').waitFor({ state: 'hidden' });
-    await fresh.waitForFunction(() => !!state.currentChecklistId && !!state.ui.lastSyncedAt && !state.ui.syncInProgress);
+    await fresh.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !!state.ui.lastSyncedAt && !state.ui.syncInProgress);
     assert.equal(await fresh.evaluate(() => state.settings.showDoneTab), false);
     assert.deepEqual(await readArchive(fresh), archive, 'A fresh device must retain the archive while hiding it');
     assert.equal(await fresh.evaluate(() => state.data.tabs[state.data.active].system === 'done'), false);
@@ -75,7 +75,7 @@ async function checkDoneArchive(page, browser, origin, password) {
     await fresh.evaluate(() => runManualSync());
     assert.deepEqual(await readRemoteArchive(fresh), archive, 'An ordinary edit must not sync an archive deletion');
     await fresh.reload();
-    await fresh.waitForFunction(() => !!state.currentChecklistId && !!state.ui.lastSyncedAt && !state.ui.syncInProgress);
+    await fresh.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !!state.ui.lastSyncedAt && !state.ui.syncInProgress);
     assert.deepEqual(await readArchive(fresh), archive, 'Reload must preserve the hidden archive');
 
     // Keep the existing in-place Mark done behavior when archiving is disabled.

@@ -120,10 +120,32 @@ async function main() {
     await page.locator('#list textarea').fill('Keep this checklist');
     await page.evaluate(() => {
       const item = state.data.tabs[state.data.active].items[0];
+      Object.assign(item, { reminderAt: new Date(Date.now() + 60000).toISOString(), reminderRepeat: 'daily',
+        reminderTimeZone: new Date().getUTCHours() === 23 ? 'America/New_York' : 'UTC', reminderDays: null });
+      renderItems();
+    });
+    await page.locator('#list input[type="checkbox"]').check();
+    await page.getByRole('button', { name: 'Skip today’s reminder', exact: true }).click();
+    await page.waitForFunction(() => {
+      const item = state.data.tabs[state.data.active].items[0];
+      return item.reminderSkipToday && Date.parse(item.reminderResetAt) > Date.parse(item.reminderAt);
+    });
+    await page.reload();
+    await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
+    assert.equal(await page.locator('#list input[type="checkbox"]').isChecked(), true);
+    assert.equal(await page.evaluate(() => {
+      const item = state.data.tabs[state.data.active].items[0];
+      return item.reminderSkipToday && window.checkyReminderState.isChecked(item, Date.parse(item.reminderAt) + 1);
+    }), true, 'A saved skip stays checked past today’s reminder after reloading');
+    await page.locator('#list input[type="checkbox"]').uncheck();
+    console.log('PASS skip today persists through real PocketBase sync and installed-web reload');
+    await page.evaluate(() => {
+      const item = state.data.tabs[state.data.active].items[0];
       Object.assign(item, {reminderAt:new Date(Date.now()+4000).toISOString(), reminderRepeat:'daily', reminderTimeZone:'UTC', reminderDays:null});
       renderItems();
     });
     await page.locator('#list input[type="checkbox"]').check();
+    await page.getByRole('button', { name: 'Keep reminder', exact: true }).click();
     await page.waitForFunction(() => !!state.data.tabs[state.data.active].items[0].reminderResetAt);
     await page.waitForFunction(() => !document.querySelector('#list input[type="checkbox"]').checked);
     assert.equal(await page.evaluate(() => state.data.tabs[state.data.active].items[0].done), true, 'Visual reset must not create a background write');

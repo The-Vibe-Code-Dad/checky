@@ -208,6 +208,7 @@ function normalizeChecklist(data) {
       reminderTimeZone: typeof item?.reminderTimeZone === 'string' ? item.reminderTimeZone.slice(0, 120) : null,
       reminderDays: Array.isArray(item?.reminderDays) ? [...new Set(item.reminderDays.filter(day => Number.isInteger(day) && day >= 0 && day <= 6))].sort() : null,
       reminderCheckedAt: typeof item?.reminderCheckedAt === 'string' && Number.isFinite(Date.parse(item.reminderCheckedAt)) ? new Date(item.reminderCheckedAt).toISOString() : null,
+      reminderSkipToday: item?.reminderSkipToday === true,
       reminderResetAt: typeof item?.reminderResetAt === 'string' && Number.isFinite(Date.parse(item.reminderResetAt)) ? new Date(item.reminderResetAt).toISOString() : null,
       originalTabName: sanitizeSingleLineText(item?.originalTabName, MAX_TAB_NAME_LENGTH) || null
     }));
@@ -1044,6 +1045,49 @@ function createSyncConflictError(message, code) {
   return error;
 }
 
+function buildSafeItemMerge(baseChecklist, localChecklist, remoteChecklist) {
+  if (!baseChecklist) return null;
+  const base = normalizeChecklist(cloneValue(baseChecklist));
+  const local = normalizeChecklist(cloneValue(localChecklist));
+  const merged = normalizeChecklist(cloneValue(remoteChecklist));
+  const signature = value => JSON.stringify(value, (key, field) => key === 'reminderResetAt' ? undefined : field);
+  const indexItems = checklist => {
+    const tabs = new Set(), items = new Map();
+    for (const tab of checklist.tabs) {
+      if (tabs.has(tab.id)) return null;
+      tabs.add(tab.id);
+      for (const item of tab.items) {
+        if (items.has(item.id)) return null;
+        items.set(item.id, { tab, item });
+      }
+    }
+    return items;
+  };
+  const baseItems = indexItems(base), localItems = indexItems(local), remoteItems = indexItems(merged);
+  if (!baseItems || !localItems || !remoteItems) return null;
+
+  // Navigation and server-derived reset times are not checklist edits. This also
+  // recovers a successful PATCH whose response never reached this device.
+  if (signature(local.tabs) !== signature(merged.tabs) && signature(local.tabs) !== signature(base.tabs)) {
+    const structure = checklist => checklist.tabs.map(({ items, ...tab }) => ({ ...tab, items: items.map(item => item.id) }));
+    // Keep structural edits on the existing explicit new-task recovery path.
+    if (signature(structure(local)) !== signature(structure(base))) return null;
+    for (const [id, { tab, item }] of localItems) {
+      const previous = baseItems.get(id).item;
+      if (signature(item) === signature(previous)) continue;
+      const remote = remoteItems.get(id);
+      // Treat each task (including its reminder/completion fields) as one unit.
+      // Never revive a deleted task or combine incompatible reminder schedules.
+      if (!remote || remote.tab.id !== tab.id ||
+          (signature(remote.item) !== signature(previous) && signature(remote.item) !== signature(item))) return null;
+      Object.assign(remote.item, cloneValue(item));
+    }
+  }
+  const active = merged.tabs.findIndex(tab => tab.id === local.tabs[local.active]?.id);
+  if (active >= 0) merged.active = active;
+  return merged;
+}
+
 function buildNewItemMerge(baseChecklist, localChecklist, remoteChecklist) {
   if (!baseChecklist) return null;
   const base = normalizeChecklist(cloneValue(baseChecklist));
@@ -1752,7 +1796,9 @@ async function pushChecklistToRemote(checklist, options = {}) {
     return;
   }
 
-  let normalizedChecklist = normalizeChecklist(checklist);
+  let normalizedChecklist = normalizeChecklist(cloneValue(checklist));
+  const submittedChecklist = cloneValue(normalizedChecklist);
+  let reconciled = false;
   const auth = await getAuthContext(credentials);
   const resolved = await resolveChecklistRecord(credentials, auth, normalizedChecklist);
   const meta = await readSyncMeta();
@@ -1783,23 +1829,31 @@ async function pushChecklistToRemote(checklist, options = {}) {
   }
 
   if (Number.isFinite(remoteVersion) && remoteVersion !== knownVersion) {
-    const merge = buildNewItemMerge(meta.baseChecklist, normalizedChecklist, extractChecklistData(record));
-    if (!merge) {
-      throw createSyncConflictError(
-        "The server checklist changed, and there are no safe new offline tasks to merge automatically.",
-        "remote_changed"
-      );
+    const safeMerge = options.allowSafeItemMerge
+      ? buildSafeItemMerge(meta.baseChecklist, normalizedChecklist, extractChecklistData(record))
+      : null;
+    if (safeMerge) {
+      normalizedChecklist = safeMerge;
+    } else {
+      const merge = buildNewItemMerge(meta.baseChecklist, normalizedChecklist, extractChecklistData(record));
+      if (!merge) {
+        throw createSyncConflictError(
+          "This checklist changed on another device. Your local changes are still saved here, but these changes need review. Export a backup before choosing which copy to keep.",
+          "remote_changed"
+        );
+      }
+      if (!options.allowNewItemMerge) {
+        const error = createSyncConflictError(
+          "The server checklist changed while this desktop was offline. Review the new offline tasks before merging.",
+          "merge_required"
+        );
+        error.mergeRequired = true;
+        error.mergeAdditions = merge.additions;
+        throw error;
+      }
+      normalizedChecklist = merge.checklist;
     }
-    if (!options.allowNewItemMerge) {
-      const error = createSyncConflictError(
-        "The server checklist changed while this desktop was offline. Review the new offline tasks before merging.",
-        "merge_required"
-      );
-      error.mergeRequired = true;
-      error.mergeAdditions = merge.additions;
-      throw error;
-    }
-    normalizedChecklist = merge.checklist;
+    reconciled = true;
     knownVersion = remoteVersion;
   }
 
@@ -1813,7 +1867,9 @@ async function pushChecklistToRemote(checklist, options = {}) {
     body.updatedBy = userId;
   }
 
-  const updated = await requestWithAuth({
+  const sameContent = (left, right) => getChecklistSignature({ ...left, active: 0 }) === getChecklistSignature({ ...right, active: 0 });
+  const updated = reconciled && sameContent(normalizedChecklist, normalizeChecklist(extractChecklistData(record)))
+    ? record : await requestWithAuth({
     credentials,
     auth,
     requestPath: `/api/collections/${recordCollectionName}/records/${record.id}`,
@@ -1821,6 +1877,19 @@ async function pushChecklistToRemote(checklist, options = {}) {
     body,
     errorMessage: "Could not push the checklist to PocketBase."
   });
+
+  if (reconciled) {
+    const current = await getCachedChecklist();
+    if (getChecklistSignature(current) !== getChecklistSignature(submittedChecklist)) {
+      // A newer local save arrived during the request. Keep its old baseline
+      // so the next sync cannot mistake unmerged server changes for deletions.
+      return current;
+    }
+    if (updated && typeof updated === "object") {
+      reminderState.mergeResetTimes(normalizedChecklist, extractChecklistData(updated));
+    }
+    await saveChecklist(normalizedChecklist);
+  }
 
   if (updated && typeof updated === "object") {
     await cacheChecklistRecord(updated, userId);
@@ -1965,7 +2034,7 @@ async function syncNow(currentChecklist, options = {}) {
       getChecklistSignature(localChecklist) !== getChecklistSignature(syncMeta.baseChecklist)
     );
     if (hasLocalChanges) {
-      const pushedChecklist = await pushChecklistToRemote(localChecklist, options);
+      const pushedChecklist = await pushChecklistToRemote(localChecklist, { ...options, allowSafeItemMerge: true });
       const { settings } = await loadSyncContext();
       return {
         ok: true,

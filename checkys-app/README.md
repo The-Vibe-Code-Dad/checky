@@ -41,6 +41,7 @@ npm run pack:win
 
 - The desktop app is local-first and continues working without a server.
 - When connected, it uses the same personal/shared checklist model as Checky Base.
+- Sync compares the last synced snapshot and server version with both current copies. Different-task edits can merge during Sync now/startup sync; conflicting edits to the same task remain local for review. Device timestamps do not choose a winner. Confirmed new-task recovery still has a preview, and merged server changes are saved locally before the next edit. Editing pauses during sync; export a backup before replacing a conflicting local copy.
 - Personal and Shared are collapsible folder rows in the tab colors, with the active checklist's tabs nested inside. Opening a folder with one checklist loads it; folders with several checklists let you choose which one to open. Drag folders or use their arrow buttons to reorder them, and use existing tab drag handles to reorder tabs within their checklist.
 - Choose **Edit > Always show** on a tab to keep it above collapsed folders and available when another checklist is open. Folder order and always-shown tabs are saved for this account on this desktop. Connection settings remain in Settings.
 - Update checks and installation are user initiated. The app re-reads `desktop-updates/latest.json`, downloads only from the connected Base origin, enforces a 500 MB limit, verifies the published SHA-256 checksum, opens the verified Windows installer, and then closes itself.

@@ -360,7 +360,7 @@ function save(e) {
           reminders['item:' + item.id] = { reminderAt: item.reminderAt,
             reminderRepeat: item.reminderRepeat || 'none', reminderTimeZone: item.reminderTimeZone || null,
             reminderDays: item.reminderDays == null ? null : item.reminderDays,
-            done: !!item.done, reminderCheckedAt: item.reminderCheckedAt || null };
+            done: !!item.done, reminderCheckedAt: item.reminderCheckedAt || null, reminderSkipToday: item.reminderSkipToday === true };
         }
       }
       let changed = false;
@@ -378,6 +378,11 @@ function save(e) {
               require(__hooks + '/lib/reminder-state.js').repeating(item) ? new Date().toISOString() : old.reminderCheckedAt;
             changed = true;
           }
+          if (!Object.prototype.hasOwnProperty.call(item, 'reminderSkipToday')) {
+            const checked = Date.parse(item.reminderCheckedAt);
+            item.reminderSkipToday = !!item.done && Number.isFinite(checked) && checked === Date.parse(old.reminderCheckedAt) && old.reminderSkipToday;
+            changed = true;
+          }
         }
       }
       if (changed) e.record.set('data', after);
@@ -390,14 +395,15 @@ function save(e) {
     let changed = false;
     for (const tab of completionData.tabs) for (const item of tab.items) {
       if (!item || typeof item !== 'object') continue;
-      if (!Object.prototype.hasOwnProperty.call(item, 'reminderCheckedAt') && !Object.prototype.hasOwnProperty.call(item, 'reminderResetAt')) continue;
+      if (!Object.prototype.hasOwnProperty.call(item, 'reminderCheckedAt') && !Object.prototype.hasOwnProperty.call(item, 'reminderResetAt') && !Object.prototype.hasOwnProperty.call(item, 'reminderSkipToday')) continue;
       const checked = Date.parse(item.reminderCheckedAt);
       const active = tab.system !== 'done' && item.done && Number.isFinite(checked) && require(__hooks + '/lib/reminder-state.js').repeating(item);
-      const reset = active ? require(__hooks + '/lib/reminder-schedule.js').nextOccurrence(item, checked) : NaN;
+      const reset = active ? require(__hooks + '/lib/reminder-schedule.js').resetOccurrence(item, checked) : NaN;
+      const skipToday = !!active && item.reminderSkipToday === true;
       const checkedAt = active ? new Date(checked).toISOString() : null;
       const resetAt = Number.isFinite(reset) ? new Date(reset).toISOString() : null;
-      if (item.reminderCheckedAt !== checkedAt || item.reminderResetAt !== resetAt) {
-        item.reminderCheckedAt = checkedAt; item.reminderResetAt = resetAt; changed = true;
+      if (item.reminderCheckedAt !== checkedAt || item.reminderResetAt !== resetAt || item.reminderSkipToday !== skipToday) {
+        item.reminderCheckedAt = checkedAt; item.reminderResetAt = resetAt; item.reminderSkipToday = skipToday; changed = true;
       }
     }
     if (changed) e.record.set('data', completionData);

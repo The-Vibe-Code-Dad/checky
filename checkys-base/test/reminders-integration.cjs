@@ -49,7 +49,8 @@ routerAdd('POST', '/api/checky-test/reminders/calendar', (e) => {
   return e.json(200, {results})
 }, $apis.requireSuperuserAuth())
 routerAdd('POST', '/api/checky-test/reminders/next', (e) => e.json(200, {results:e.requestInfo().body.cases.map(test => {
-  const at = require(__hooks + '/lib/reminder-schedule.js').nextOccurrence(test.item, Date.parse(test.after))
+  const schedule = require(__hooks + '/lib/reminder-schedule.js')
+  const at = (test.reset ? schedule.resetOccurrence : schedule.nextOccurrence)(test.item, Date.parse(test.after))
   return Number.isFinite(at) ? new Date(at).toISOString() : null
 })}), $apis.requireSuperuserAuth())`);
     child = spawn(binary, ['serve', '--automigrate=false', '--http=127.0.0.1:' + port, '--dir=' + path.join(dir, 'data'), '--hooksDir=' + path.join(dir, 'hooks'), '--migrationsDir=' + path.join(__dirname, '../pocketbase/pb_migrations')], {
@@ -131,11 +132,47 @@ routerAdd('POST', '/api/checky-test/reminders/next', (e) => e.json(200, {results
     const checked = await req('/api/checky-test/reminders/calendar', 'POST', {cases:checkedCases}, ah);
     checkedCases.forEach((test,i) => assert.deepEqual(checked.data.results[i], test.expected));
     console.log('PASS next occurrence after checking, selected weekdays, DST gaps/folds, month/year boundaries and permanent completion');
+    const earlyCases = [
+      calendarCase('daily', '2030-03-09T14:00:00Z', '2030-03-10T13:05:00Z', null, { done: true, reminderCheckedAt: '2030-03-10T10:00:00Z', reminderSkipToday: true }),
+      calendarCase('daily', '2030-03-09T14:00:00Z', '2030-03-11T13:05:00Z', '2030-03-11T13:00:00Z', { done: true, reminderCheckedAt: '2030-03-10T10:00:00Z', reminderSkipToday: true }),
+      calendarCase('daily', '2030-03-09T14:00:00Z', '2030-03-10T13:05:00Z', '2030-03-10T13:00:00Z', { done: true, reminderCheckedAt: '2030-03-10T10:00:00Z', reminderSkipToday: false }),
+      calendarCase('daily', '2030-03-09T14:00:00Z', '2030-03-10T13:05:00Z', '2030-03-10T13:00:00Z', { done: false, reminderCheckedAt: '2030-03-10T10:00:00Z', reminderSkipToday: true }),
+      calendarCase('daily', '2030-01-01T00:30:00Z', '2030-01-03T00:35:00Z', null, { done: true, reminderTimeZone: 'Asia/Tokyo', reminderCheckedAt: '2030-01-02T22:00:00Z', reminderSkipToday: true })
+    ];
+    const earlyDue = await req('/api/checky-test/reminders/calendar', 'POST', { cases: earlyCases }, ah);
+    earlyCases.forEach((test, i) => assert.deepEqual(earlyDue.data.results[i], test.expected));
+    const earlyResetCases = [
+      ['daily', '2030-03-09T14:00:00Z', '2030-03-10T10:00:00Z', '2030-03-11T13:00:00.000Z'],
+      ['weekly', '2030-03-09T14:00:00Z', '2030-03-10T10:00:00Z', '2030-03-13T13:00:00.000Z', { reminderDays: [0, 3] }],
+      ['monthly', '2030-01-31T14:00:00Z', '2030-02-28T10:00:00Z', '2030-03-31T13:00:00.000Z'],
+      ['yearly', '2028-02-29T14:00:00Z', '2029-02-28T10:00:00Z', '2030-02-28T14:00:00.000Z'],
+      ['daily', '2030-03-09T14:00:00Z', '2030-03-10T14:00:00Z', '2030-03-11T13:00:00.000Z'],
+      ['daily', '2030-03-09T07:30:00Z', '2030-03-10T05:00:00Z', '2030-03-11T06:30:00.000Z'],
+      ['daily', '2030-01-01T00:30:00Z', '2030-01-02T22:00:00Z', '2030-01-04T00:30:00.000Z', { reminderTimeZone: 'Asia/Tokyo' }]
+    ].map(([repeat, first, after, expected, extra = {}]) => ({ reset: true, after, expected, item: {
+      reminderAt: first, reminderRepeat: repeat, reminderTimeZone: 'America/New_York', done: true, reminderCheckedAt: after, reminderSkipToday: true, ...extra
+    } }));
+    const earlyReset = await req('/api/checky-test/reminders/next', 'POST', { cases: earlyResetCases }, ah);
+    earlyResetCases.forEach((test, i) => assert.equal(earlyReset.data.results[i], test.expected));
+    console.log('PASS skip today suppresses only the selected day and resets at the following daily/weekly/monthly/yearly occurrence');
     const create = async name => {
       const result = await req('/api/collections/users/records', 'POST', { email: name + '@reminders.invalid', password, passwordConfirm: password }, ah);
       assert.equal(result.status, 200); return { ...result.data, email: name + '@reminders.invalid' };
     };
     const alice = await create('alice'), bob = await create('bob');
+    const early = await create('early');
+    const earlyData = { tabs: [{ id: 'early-tab', name: 'Early', items: [{ id: 'early-item', text: 'Early task', ...earlyResetCases[0].item }] }] };
+    const earlyWrite = await req('/api/collections/checklists/records/' + early.defaultChecklist, 'PATCH', { version: 2, data: earlyData }, ah);
+    assert.equal(earlyWrite.status, 200, JSON.stringify(earlyWrite.data));
+    assert.equal(earlyWrite.data.data.tabs[0].items[0].reminderResetAt, earlyResetCases[0].expected);
+    delete earlyData.tabs[0].items[0].reminderSkipToday;
+    const retained = await req('/api/collections/checklists/records/' + early.defaultChecklist, 'PATCH', { version: 3, data: earlyData }, ah);
+    assert.equal(retained.data.data.tabs[0].items[0].reminderSkipToday, true, 'Older clients preserve the skip choice');
+    assert.equal(retained.data.data.tabs[0].items[0].reminderResetAt, earlyResetCases[0].expected);
+    earlyData.tabs[0].items[0].done = false;
+    const reactivated = await req('/api/collections/checklists/records/' + early.defaultChecklist, 'PATCH', { version: 4, data: earlyData }, ah);
+    assert.equal(reactivated.data.data.tabs[0].items[0].reminderSkipToday, false);
+    assert.equal(reactivated.data.data.tabs[0].items[0].reminderResetAt, null);
     const login = await req('/api/collections/users/auth-with-password', 'POST', { identity: alice.email, password });
     assert.equal(login.status, 200, JSON.stringify(login.data));
     const session = await req('/api/checkys-base/session/login', 'POST', { token: login.data.token });

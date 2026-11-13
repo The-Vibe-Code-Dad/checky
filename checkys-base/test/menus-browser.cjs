@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const http = require('node:http');
 const { chromium } = require(process.env.CHECKY_PLAYWRIGHT_MODULE || 'playwright');
+const { checkEarlyReminders } = require('./early-reminders-browser.cjs');
 
 async function main() {
   const root = path.resolve(__dirname, '../..');
@@ -57,6 +58,31 @@ async function main() {
       // Base schedules startup sync after first render. A merely idle renderer can
       // still rebuild the tabs during the first hold, so wait for that sync to finish.
       await page.waitForFunction(() => window.checkyTestSyncStarted && typeof state !== 'undefined' && state.data.tabs[0]?.id === 'alpha' && !state.ui.syncInProgress);
+      await checkEarlyReminders(page, surface);
+      await page.evaluate(surface => {
+        const api = surface === 'base' ? window.checkyStorage : window.checkyApi;
+        const originalSync = api.syncNow;
+        window.originalTestSync = originalSync;
+        api.syncNow = async (...args) => {
+          await new Promise(resolve => { window.resumeTestSync = resolve; });
+          return originalSync(...args);
+        };
+        window.pendingTestSync = surface === 'base' ? runManualSync() : runSync();
+      }, surface);
+      await page.waitForFunction(() => !!window.resumeTestSync);
+      assert.equal(await page.locator('#app').evaluate(app => app.inert), true, 'Editing pauses while server changes are reconciled');
+      await page.evaluate(async () => { window.resumeTestSync(); await window.pendingTestSync; });
+      assert.equal(await page.locator('#app').evaluate(app => app.inert), false, 'Editing resumes after sync');
+      await page.evaluate(surface => {
+        const api = surface === 'base' ? window.checkyStorage : window.checkyApi;
+        api.syncNow = async () => { throw Error('Test sync failure'); };
+        window.failedTestSync = surface === 'base' ? runManualSync() : runSync();
+      }, surface);
+      await page.evaluate(() => window.failedTestSync);
+      assert.equal(await page.locator('#app').evaluate(app => app.inert), false, 'A network error also resumes editing');
+      await page.evaluate(surface => { (surface === 'base' ? window.checkyStorage : window.checkyApi).syncNow = window.originalTestSync; }, surface);
+      console.log('PASS ' + surface + ': stable sync snapshot and editing restored after success/failure');
+
       const touch = await context.newCDPSession(page);
       const menu = page.locator('#itemContextMenu');
       async function hold(locator) {

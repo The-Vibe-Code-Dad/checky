@@ -369,6 +369,18 @@ base:
 - Enlarged the notification settings link to a full-width, 48-pixel touch target and spaced it away from the other actions.
 - Removed the Android shortcut’s redirect back to Checky, which could reopen the installed app when the phone blocked the shortcut. The dialog shows the manual App info path after a tap.
 
+## v0075 - 2026-11-12
+- Added “Skip today’s reminder?” when checking a repeating item before its scheduled time that day. Skip keeps it checked until the following occurrence; Keep reminder retains the usual reset, and Cancel leaves the item unchanged.
+- Applied the choice to server notification delivery in the reminder’s saved timezone, preserving later repeats, selected weekdays, calendar boundaries and older-client saves. Unchecking or changing the reminder clears the skip; shared lists sync the choice for all members.
+- Added phone/desktop popup, calendar, storage and Base/desktop sync coverage, and included the popup in installed-web caching. Guarded the existing Done archive browser test against checking state before the renderer loads.
+- Verified 15 unit/build/security checks, the phone/desktop browser suite, real reminder scheduling and Base/desktop sync, and the full installed-web update/Done archive suite. Changes are local; no hosted deployment or installer publication was performed.
+
+## v0076 - 2026-11-13
+- Fixed list switching retaining the previous list's sync snapshot: Base now saves the selected list's snapshot together with its server version.
+- Added conservative three-way reconciliation during sync for edits to different existing tasks, including checks/unchecks and reminder completion metadata. Already accepted saves and navigation-only differences recover without another write; overlapping edits, changed reminder schedules, deleted tasks and local structural edits retain conflict protection and the existing confirmed new-task recovery path.
+- Persisted reconciled checklists locally so later saves retain server changes, paused editing during sync, and clarified conflict feedback. Server versions and snapshots remain authoritative; device timestamps do not select a winner.
+- Passed eight merge regressions, real personal/shared Base and desktop sync checks, browser interaction checks, web build/cache and desktop security tests, and the complete installed-web update/Done archive suite. Changes are local; no hosted deployment was performed.
+
 desktop:
 
 ## v0001 - 2026-04-07
@@ -502,6 +514,14 @@ desktop:
 ## v0037 - 2026-11-05
 - Added the same tab hold/right-click menu as Base, including rename, reordering, shortcut toggling and confirmed deletion. Deleting the final ordinary tab now preserves the Done archive.
 - Shared Base's press-release protection and viewport-aware menu placement; resizing no longer rebuilds menu buttons. Verified the desktop renderer's menu interactions in Chromium; the packaged desktop version/installers are unchanged.
+
+## v0038 - 2026-11-12
+- Added the early-check reminder popup and preserved its skip-today choice through desktop normalization, local storage and Base sync. Restored the missing immediate-save helper used by checkbox completion and Mark done.
+- Verified the desktop renderer interactions and real personal/shared sync. Public installer versions are unchanged.
+
+## v0039 - 2026-11-13
+- Matched Base's conservative reconciliation for different-task edits, checkmarks, already accepted saves and navigation-only differences, while preserving conflicting local data and the explicit new-task recovery preview.
+- Saved merged server changes to the local checklist before subsequent edits and paused editing during sync. Verified personal/shared sync, cache persistence, conflict protection, browser interactions and desktop security checks. Public installer versions and published installers are unchanged.
 
 pocketbase:
 
@@ -648,3 +668,7 @@ pocketbase:
 
 ## v0040 - 2026-11-05
 - Clarified that PocketBase superusers administer the optional Baby tracker through `checky_baby_lists.members`; Checky app-admin status grants no automatic baby access. Existing explicit assignments and database entries are retained.
+
+## v0041 - 2026-11-12
+- Mirrored Base’s skip-today reminder delivery and following-occurrence reset calculation, including timezone handling, older-client preservation and clearing on uncheck.
+- Reminder integration and Base/desktop sync checks passed. The wider security runner still fails its post-MFA shared-access assertion (404 instead of 200); reproduced the same failure against the unchanged pre-task backend hooks.
