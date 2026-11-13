@@ -247,6 +247,7 @@ function normalizeData(data) {
       reminderTimeZone: typeof item?.reminderTimeZone === 'string' ? item.reminderTimeZone.slice(0, 120) : null,
       reminderDays: Array.isArray(item?.reminderDays) ? [...new Set(item.reminderDays.filter(day => Number.isInteger(day) && day >= 0 && day <= 6))].sort() : null,
       reminderCheckedAt: typeof item?.reminderCheckedAt === 'string' && Number.isFinite(Date.parse(item.reminderCheckedAt)) ? new Date(item.reminderCheckedAt).toISOString() : null,
+      reminderSkipToday: item?.reminderSkipToday === true,
       reminderResetAt: typeof item?.reminderResetAt === 'string' && Number.isFinite(Date.parse(item.reminderResetAt)) ? new Date(item.reminderResetAt).toISOString() : null,
       originalTabName: sanitizeSingleLineText(item?.originalTabName, MAX_TAB_NAME_LENGTH) || null
     }));
@@ -935,6 +936,10 @@ async function runManualSync(source = "settings") {
   clearTimeout(pullSyncFeedbackTimer);
   pullSyncFeedbackTimer = null;
   state.ui.syncInProgress = true;
+  // Keep the submitted snapshot stable while sync may reconcile server changes.
+  const syncApp = document.getElementById("app");
+  syncApp.inert = true;
+  syncApp.setAttribute("aria-busy", "true");
   renderSettings();
   setPullSyncIndicator("Syncing...", {
     height: 52,
@@ -1001,6 +1006,8 @@ async function runManualSync(source = "settings") {
     flashPullSyncIndicator("Sync failed.", true, 1600);
   } finally {
     state.ui.syncInProgress = false;
+    syncApp.inert = false;
+    syncApp.removeAttribute("aria-busy");
     renderSettings();
     if (source !== "pull" && !pullSyncFeedbackTimer) {
       resetPullSyncIndicator();
@@ -1388,7 +1395,7 @@ function markItemDone(tabIndex, itemIndex) {
   if (!state.settings.showDoneTab || doneTabIndex === -1) {
     const item = state.data.tabs[tabIndex]?.items[itemIndex];
     if (!item) return;
-    item.done = true; item.reminderCheckedAt = null; item.reminderResetAt = null;
+    item.done = true; item.reminderCheckedAt = null; item.reminderSkipToday = false; item.reminderResetAt = null;
     render(); persistChecklistImmediately(); return;
   }
   const sourceTab = state.data.tabs[tabIndex];
@@ -1396,7 +1403,7 @@ function markItemDone(tabIndex, itemIndex) {
   const [item] = sourceTab.items.splice(itemIndex, 1);
   if (!item) return;
   item.done = true;
-  item.reminderCheckedAt = null;
+  item.reminderCheckedAt = null; item.reminderSkipToday = false;
   item.reminderResetAt = null;
   item.completedAt = new Date().toISOString();
   item.originalTabName = sourceTab.name;
@@ -1415,7 +1422,7 @@ function undoDoneItem(itemIndex) {
   const targetIndex = state.data.tabs.findIndex((tab) => !isDoneTab(tab) && tab.name === item.originalTabName);
   const safeTargetIndex = targetIndex === -1 ? getSafeChecklistTabIndex() : targetIndex;
   item.done = false;
-  item.reminderCheckedAt = null;
+  item.reminderCheckedAt = null; item.reminderSkipToday = false;
   item.reminderResetAt = null;
   item.completedAt = null;
   item.originalTabName = null;
@@ -1968,6 +1975,28 @@ function renderArchive(doneTab) {
   });
 }
 
+async function changeItemCheck(tabId, itemId, checked) {
+  const reminder = window.checkyReminderState;
+  const checklistId = state.currentChecklistId;
+  const findItem = () => state.data.tabs.find(tab => tab.id === tabId)?.items.find(item => item.id === itemId);
+  const item = findItem();
+  if (!item) return;
+  const now = Date.now(), identity = reminder.identity(item);
+  let skipToday = false;
+  if (checked && reminder.hasReminderLaterToday(item, now)) {
+    skipToday = await window.checkyConfirmEarlyCheck(item);
+    // Sync can replace a checklist while the dialog is open. Never apply an
+    // answer to a different list, changed schedule or newer completion.
+    const current = findItem();
+    if (skipToday === null || checklistId !== state.currentChecklistId || !current || reminder.identity(current) !== identity) {
+      refreshRepeatingCheckboxes(); return;
+    }
+  }
+  reminder.setChecked(findItem(), checked, now, skipToday);
+  persistChecklistImmediately();
+  refreshRepeatingCheckboxes();
+}
+
 function renderItems() {
   els.list.innerHTML = "";
   els.doneArchiveTools.classList.toggle("hidden", !state.ui.doneViewOpen || !state.settings.showDoneTab);
@@ -2004,8 +2033,7 @@ function renderItems() {
         check.checked = window.checkyReminderState.isChecked(item);
         return;
       }
-      window.checkyReminderState.setChecked(item, check.checked);
-      persistChecklistImmediately();
+      void changeItemCheck(tab.id, item.id, check.checked);
     };
     check.onpointerdown = (event) => {
       if (event.button !== 0) return;
@@ -2172,6 +2200,7 @@ async function editItemReminder(tabId, itemId) {
   if (checklistId !== state.currentChecklistId || !current || window.checkyReminderState.isChecked(current)) return;
   current.done = false;
   current.reminderCheckedAt = null;
+  current.reminderSkipToday = false;
   current.reminderResetAt = null;
   current.reminderAt = value?.at || null;
   current.reminderRepeat = value?.repeat || 'none';

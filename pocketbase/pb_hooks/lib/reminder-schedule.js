@@ -104,4 +104,18 @@ function nextOccurrence(item, after) {
   } catch (_) {}
   return NaN
 }
-module.exports = { latestOccurrence, nextOccurrence }
+function skipsOccurrence(item, at) {
+  const checked = Date.parse(item.reminderCheckedAt)
+  if (!item.done || item.reminderSkipToday !== true || !Number.isFinite(checked) || !Number.isFinite(at) || at <= checked) return false
+  try {
+    const zone = new Timezone(item.reminderTimeZone)
+    if (!item.reminderTimeZone || item.reminderTimeZone === 'Local' || zone.string() !== item.reminderTimeZone) return false
+    const date = value => new DateTime(new Date(value).toISOString()).time().in(zone).format('2006-01-02')
+    return date(checked) === date(at)
+  } catch (_) { return false }
+}
+function resetOccurrence(item, checked) {
+  const next = nextOccurrence(item, checked)
+  return skipsOccurrence(item, next) ? nextOccurrence(item, next) : next
+}
+module.exports = { latestOccurrence, nextOccurrence, skipsOccurrence, resetOccurrence }

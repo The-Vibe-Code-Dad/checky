@@ -76,6 +76,7 @@ function dueItems(data, now, enabledAt) {
       const checkedAt = Date.parse(item.reminderCheckedAt)
       const repeating = ['daily', 'weekly', 'monthly', 'yearly'].includes(item.reminderRepeat)
       if (item.done && (!repeating || !Number.isFinite(checkedAt) || at <= checkedAt)) continue
+      if (repeating && require(__hooks + '/lib/reminder-schedule.js').skipsOccurrence(item, at)) continue
       due.push({ id: item.id, at: new Date(at).toISOString(), text: String(item.text || 'Checklist event').slice(0, 160), tab: String(tab.name || '').slice(0, 120) })
     }
   }
