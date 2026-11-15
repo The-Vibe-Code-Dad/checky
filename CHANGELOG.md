@@ -381,6 +381,10 @@ base:
 - Persisted reconciled checklists locally so later saves retain server changes, paused editing during sync, and clarified conflict feedback. Server versions and snapshots remain authoritative; device timestamps do not select a winner.
 - Passed eight merge regressions, real personal/shared Base and desktop sync checks, browser interaction checks, web build/cache and desktop security tests, and the complete installed-web update/Done archive suite. Changes are local; no hosted deployment was performed.
 
+## v0078 - 2026-11-15
+- Added weekly setup to the tab menu and Edit week to configured tabs. Choose reminder days, time and a Sunday or Monday midnight reset. Setup reuses existing weekday rows while preserving other tasks.
+- Mark done records a dated occurrence in the Done archive. The next week opens with fresh unchecked days while dated history stays available. Checkmarks, schedules and history survive offline reopening and sync.
+
 desktop:
 
 ## v0001 - 2026-04-07
@@ -522,6 +526,9 @@ desktop:
 ## v0039 - 2026-11-13
 - Matched Base's conservative reconciliation for different-task edits, checkmarks, already accepted saves and navigation-only differences, while preserving conflicting local data and the explicit new-task recovery preview.
 - Saved merged server changes to the local checklist before subsequent edits and paused editing during sync. Verified personal/shared sync, cache persistence, conflict protection, browser interactions and desktop security checks. Public installer versions and published installers are unchanged.
+
+## v0040 - 2026-11-15
+- Added weekly checklist setup, weekday checkboxes, timestamped Done entries and weekly resets to the desktop source. Connected desktops sync the same schedule and history as Base.
 
 pocketbase:
 
@@ -672,3 +679,6 @@ pocketbase:
 ## v0041 - 2026-11-12
 - Mirrored Base’s skip-today reminder delivery and following-occurrence reset calculation, including timezone handling, older-client preservation and clearing on uncheck.
 - Reminder integration and Base/desktop sync checks passed. The wider security runner still fails its post-MFA shared-access assertion (404 instead of 200); reproduced the same failure against the unchanged pre-task backend hooks.
+
+## v0042 - 2026-11-15
+- Added weekly-tab calendar boundaries to reminder delivery and acknowledgement, and preserved weekly settings and archive links on older-client saves. Sunday/Monday resets use the saved timezone without scheduled database writes.

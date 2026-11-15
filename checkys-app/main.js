@@ -1,6 +1,7 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, Tray, Menu, nativeImage, safeStorage, shell, session } = require("electron");
 const crypto = require("crypto");
 const reminderState = require("./renderer/reminder-state.js");
+const weeklyChecklist = require("./renderer/weekly-checklist.js");
 const fs = require("fs/promises");
 const path = require("path");
 const { verifyManifest, requireHttps, readBoundedBody } = require('./lib/desktop-update.cjs');
@@ -196,6 +197,7 @@ function normalizeChecklist(data) {
       : "legacy-tab-" + index;
     normalizedTabs[index].items = normalizedTabs[index].items.slice(0, MAX_ITEMS_PER_TAB);
     normalizedTabs[index].system = normalizedTabs[index].system === "done" ? "done" : undefined;
+    if (normalizedTabs[index].weeklyChecklist) normalizedTabs[index].weeklyChecklist = weeklyChecklist.normalize(normalizedTabs[index].weeklyChecklist);
     normalizedTabs[index].items = normalizedTabs[index].items.map((item, itemIndex) => ({
       id: typeof item?.id === "string" && item.id.trim()
         ? item.id.trim().slice(0, 120)
@@ -210,6 +212,8 @@ function normalizeChecklist(data) {
       reminderCheckedAt: typeof item?.reminderCheckedAt === 'string' && Number.isFinite(Date.parse(item.reminderCheckedAt)) ? new Date(item.reminderCheckedAt).toISOString() : null,
       reminderSkipToday: item?.reminderSkipToday === true,
       reminderResetAt: typeof item?.reminderResetAt === 'string' && Number.isFinite(Date.parse(item.reminderResetAt)) ? new Date(item.reminderResetAt).toISOString() : null,
+      ...(typeof item?.weeklySourceId === "string" ? { weeklySourceId: item.weeklySourceId.slice(0, 120) } : {}),
+      ...(item?.weeklyArchivedAt !== undefined ? { weeklyArchivedAt: normalizeCompletedAt(item.weeklyArchivedAt) } : {}),
       originalTabName: sanitizeSingleLineText(item?.originalTabName, MAX_TAB_NAME_LENGTH) || null
     }));
   });
@@ -1079,6 +1083,8 @@ function buildSafeItemMerge(baseChecklist, localChecklist, remoteChecklist) {
       // Treat each task (including its reminder/completion fields) as one unit.
       // Never revive a deleted task or combine incompatible reminder schedules.
       if (!remote || remote.tab.id !== tab.id ||
+          ((tab.weeklyChecklist?.itemIds.includes(id) || remote.tab.weeklyChecklist?.itemIds.includes(id)) &&
+           signature(tab.weeklyChecklist) !== signature(remote.tab.weeklyChecklist)) ||
           (signature(remote.item) !== signature(previous) && signature(remote.item) !== signature(item))) return null;
       Object.assign(remote.item, cloneValue(item));
     }
@@ -1098,7 +1104,9 @@ function buildNewItemMerge(baseChecklist, localChecklist, remoteChecklist) {
   const additions = [];
 
   local.tabs.forEach((localTab) => {
-    const newItems = localTab.items.filter((item) => !baseIds.has(item.id) && !mergedIds.has(item.id));
+    // Weekly rows and dated Done entries must travel with the schedule and completion they belong to.
+    const newItems = localTab.items.filter(item => !item.weeklySourceId && !localTab.weeklyChecklist?.itemIds.includes(item.id) &&
+      !baseIds.has(item.id) && !mergedIds.has(item.id));
     if (!newItems.length) return;
     let targetTab = merged.tabs.find((tab) => tab.id === localTab.id);
     if (!targetTab) {

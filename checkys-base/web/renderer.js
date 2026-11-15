@@ -235,6 +235,7 @@ function normalizeData(data) {
     if (!Array.isArray(tab.items)) tab.items = [];
     tab.items = tab.items.slice(0, MAX_ITEMS_PER_TAB);
     tab.system = tab.system === DONE_TAB_SYSTEM ? DONE_TAB_SYSTEM : undefined;
+    if (tab.weeklyChecklist) tab.weeklyChecklist = window.checkyWeekly.normalize(tab.weeklyChecklist);
     tab.items = tab.items.map((item, itemIndex) => ({
       id: typeof item?.id === "string" && item.id.trim()
         ? item.id.trim().slice(0, 120)
@@ -249,6 +250,8 @@ function normalizeData(data) {
       reminderCheckedAt: typeof item?.reminderCheckedAt === 'string' && Number.isFinite(Date.parse(item.reminderCheckedAt)) ? new Date(item.reminderCheckedAt).toISOString() : null,
       reminderSkipToday: item?.reminderSkipToday === true,
       reminderResetAt: typeof item?.reminderResetAt === 'string' && Number.isFinite(Date.parse(item.reminderResetAt)) ? new Date(item.reminderResetAt).toISOString() : null,
+      ...(typeof item?.weeklySourceId === "string" ? { weeklySourceId: item.weeklySourceId.slice(0, 120) } : {}),
+      ...(item?.weeklyArchivedAt !== undefined ? { weeklyArchivedAt: normalizeCompletedAt(item.weeklyArchivedAt) } : {}),
       originalTabName: sanitizeSingleLineText(item?.originalTabName, MAX_TAB_NAME_LENGTH) || null
     }));
   });
@@ -1242,6 +1245,7 @@ function renderTabContextMenu(menuState) {
       const input = document.querySelector(".tab-name-input");
       input?.focus(); input?.select();
     });
+    add(tab.weeklyChecklist ? "Edit week" : "Set up weekly checklist", () => editWeeklyTab(tab.id));
     add("Move up", () => moveTabByOffset(index, -1), { disabled: regularTabs[0] === tab });
     add("Move down", () => moveTabByOffset(index, 1), { disabled: regularTabs.at(-1) === tab });
     add(isTabAlwaysVisible(tab.id) ? "Remove shortcut" : "Always show", () => toggleTabShortcut(tab));
@@ -1419,6 +1423,17 @@ function undoDoneItem(itemIndex) {
   const doneTab = state.data.tabs[doneTabIndex];
   const [item] = doneTab.items.splice(itemIndex, 1);
   if (!item) return;
+  if (item.weeklySourceId) {
+    const source = state.data.tabs.find(tab => tab.weeklyChecklist?.itemIds.includes(item.weeklySourceId));
+    const day = source?.items.find(entry => entry.id === item.weeklySourceId);
+    if (day && day.weeklyArchivedAt === item.completedAt && window.checkyWeekly.archivedThisWeek(day, source.weeklyChecklist)) {
+      window.checkyWeekly.setChecked(day, false);
+      state.data.active = state.data.tabs.indexOf(source);
+      state.ui.lastChecklistTabIndex = state.data.active;
+      state.ui.doneViewOpen = false;
+    }
+    closeItemContextMenu(); render(); persistChecklistImmediately(); return;
+  }
   const targetIndex = state.data.tabs.findIndex((tab) => !isDoneTab(tab) && tab.name === item.originalTabName);
   const safeTargetIndex = targetIndex === -1 ? getSafeChecklistTabIndex() : targetIndex;
   item.done = false;
@@ -1997,6 +2012,47 @@ async function changeItemCheck(tabId, itemId, checked) {
   refreshRepeatingCheckboxes();
 }
 
+async function editWeeklyTab(tabId) {
+  if (state.ui.syncInProgress) return;
+  syncVisibleItemsToState();
+  const tab = state.data.tabs.find(entry => entry.id === tabId);
+  if (!tab || isDoneTab(tab)) return;
+  const record = state.currentChecklistId;
+  const baseline = JSON.stringify(tab.weeklyChecklist);
+  const choices = await window.checkyWeekly.edit(tab);
+  if (!choices) return;
+  const current = state.data.tabs.find(entry => entry.id === tabId);
+  if (record !== state.currentChecklistId || !current || baseline !== JSON.stringify(current.weeklyChecklist)) {
+    window.alert('This schedule changed. Open Edit week again.'); return;
+  }
+  try { window.checkyWeekly.configure(current, choices, createEntityId, MAX_ITEMS_PER_TAB); }
+  catch (error) { window.alert(error.message); return; }
+  state.data.active = state.data.tabs.indexOf(current);
+  state.ui.lastChecklistTabIndex = state.data.active;
+  state.ui.doneViewOpen = false;
+  closeDrawer();
+  render();
+  clearPendingSave();
+  if (await persistChecklistSnapshot(createChecklistSnapshot(), ++lastChecklistSaveRequestId)) await runManualSync("weekly");
+}
+
+function renderWeeklyRows(tab) {
+  return window.checkyWeekly.renderRows(els.list, tab, () => editWeeklyTab(tab.id), (id, checked) => {
+    const current = state.data.tabs[state.data.active]?.items.find(item => item.id === id);
+    if (!current) return;
+    window.checkyWeekly.setChecked(current, checked);
+    persistChecklistImmediately();
+  }, state.settings.showDoneTab ? id => {
+    const source = state.data.tabs[state.data.active], item = source?.items.find(entry => entry.id === id);
+    const archive = state.data.tabs[getDoneTabIndex()];
+    if (!item || !archive) return;
+    try { window.checkyWeekly.archiveDay(source, item, archive, createEntityId, MAX_ITEMS_PER_TAB); }
+    catch (error) { window.alert(error.message); return; }
+    renderItems();
+    persistChecklistImmediately();
+  } : null);
+}
+
 function renderItems() {
   els.list.innerHTML = "";
   els.doneArchiveTools.classList.toggle("hidden", !state.ui.doneViewOpen || !state.settings.showDoneTab);
@@ -2012,7 +2068,9 @@ function renderItems() {
   }
 
   const tab = state.data.tabs[state.data.active];
+  const weeklyIds = renderWeeklyRows(tab);
   tab.items.forEach((item, index) => {
+    if (weeklyIds?.has(item.id)) return;
     const row = document.createElement("div");
     row.className = "item";
     row.dataset.itemIndex = String(index);
@@ -2728,6 +2786,15 @@ init();
 function refreshRepeatingCheckboxes() {
   if (document.visibilityState === 'hidden' || state.ui.settingsViewOpen || state.ui.doneViewOpen) return;
   const tab = state.data.tabs[state.data.active];
+  const header = els.list.querySelector('.week-header');
+  if (header && tab?.weeklyChecklist) {
+    const week = window.checkyWeekly.weekStart(Date.now(), tab.weeklyChecklist);
+    if (Number(header.dataset.week) !== week) { renderItems(); return; }
+    for (const row of els.list.querySelectorAll('.week-row')) {
+      const item = tab.items[Number(row.dataset.itemIndex)];
+      if (item) row.querySelector('input').checked = window.checkyWeekly.isChecked(item, tab.weeklyChecklist);
+    }
+  }
   for (const row of els.list.querySelectorAll('.item')) {
     const item = tab?.items[Number(row.dataset.itemIndex)];
     const checkbox = row.querySelector('input[type="checkbox"]');

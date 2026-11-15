@@ -458,3 +458,20 @@ hr{
 .reminder-check-dialog p{overflow-wrap:anywhere;}
 .reminder-check-dialog .inline{display:flex;flex-wrap:wrap;gap:8px;}
 .reminder-check-dialog button{min-height:44px;}
+
+/* Weekly checklist setup and selected weekday rows. */
+.week-dialog { box-sizing:border-box; width:min(29rem,calc(100% - 24px)); max-height:90dvh; overflow:auto; padding:20px; border:1px solid #555; border-radius:12px; color:#f5f5f5; background:#242424; }
+.week-dialog::backdrop { background:rgba(0,0,0,.65); }
+.week-dialog h2, .week-tab-name { margin:0 0 6px; }
+.week-dialog fieldset { border:0; margin:16px 0; padding:0; }
+.week-dialog legend { font-weight:600; margin-bottom:6px; }
+.week-choices, .week-actions, .week-time, .week-header, .week-row, .week-row label { display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+.week-choices button, .week-actions button, .week-row button, .week-header button, .week-time input { min-height:44px; }
+.week-choices button[aria-pressed="true"] { background:#3557cc; color:white; box-shadow:inset 0 0 0 2px #a9baff; }
+.week-time, .week-header { justify-content:space-between; }
+.week-time[hidden] { display:none; }
+.week-actions { justify-content:flex-end; margin-top:14px; }
+.week-row { border-bottom:1px solid #555; min-height:48px; }
+.week-row label { flex:1; min-height:44px; gap:8px; }
+.week-row small, .week-header span { color:#c4c7cd; }
+.week-header { margin-bottom:8px; }

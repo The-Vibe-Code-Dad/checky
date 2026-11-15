@@ -45,7 +45,7 @@ async function main() {
 routerAdd('POST', '/api/checky-test/reminders/run', (e) => { require(__hooks + '/lib/reminders.js').deliver(e.app); return e.json(200, {ok:true}) }, $apis.requireSuperuserAuth())
 routerAdd('POST', '/api/checky-test/reminders/calendar', (e) => {
   const results = e.requestInfo().body.cases.map(test => require(__hooks + '/lib/reminders.js').dueItems(
-    {tabs:[{name:'Events',items:[test.item]}]}, Date.parse(test.now), Date.parse(test.enabledAt || '2000-01-01T00:00:00Z')).map(item => item.at))
+    {tabs:[{name:'Events',weeklyChecklist:test.weeklyChecklist,items:[test.item]}]}, Date.parse(test.now), Date.parse(test.enabledAt || '2000-01-01T00:00:00Z')).map(item => item.at))
   return e.json(200, {results})
 }, $apis.requireSuperuserAuth())
 routerAdd('POST', '/api/checky-test/reminders/next', (e) => e.json(200, {results:e.requestInfo().body.cases.map(test => {
@@ -72,6 +72,11 @@ routerAdd('POST', '/api/checky-test/reminders/next', (e) => e.json(200, {results
       expected: expected ? [new Date(expected).toISOString()] : []
     });
     const calendarCases = [
+      ...[0,1].map(resetDay => ({
+        ...calendarCase('weekly', '2030-03-03T14:00:00Z', '2030-03-10T13:05:00Z', resetDay === 0 ? '2030-03-10T13:00:00Z' : null,
+          { reminderDays:[0], done:true, reminderCheckedAt:'2030-03-09T18:00:00Z' }),
+        weeklyChecklist: {resetDay, timeZone:'America/New_York', days:[0], itemIds:['calendar']}
+      })),
       calendarCase('daily', '2030-03-09T14:00:00Z', '2030-03-10T13:05:00Z', '2030-03-10T13:00:00Z'),
       calendarCase('weekly', '2030-03-03T14:00:00Z', '2030-03-10T13:05:00Z', '2030-03-10T13:00:00Z'),
       calendarCase('monthly', '2030-01-31T14:00:00Z', '2030-02-28T14:05:00Z', '2030-02-28T14:00:00Z'),
