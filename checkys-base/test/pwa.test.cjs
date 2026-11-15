@@ -45,9 +45,10 @@ test('Docker web versions are deterministic and change with runtime files', asyn
 test('worker waits for a complete shell, preserves unrelated caches and never caches APIs or update checks', async () => {
   const handlers = {}, deleted = [], fetched = [];
   let complete = false, skipped = false, fail = false;
+  let entry = '<script src="./pwa.js?v=__CHECKY_BUILD__"></script>';
   const cache = {
     addAll: async requests => { assert.ok(requests.every(r => r.cache === 'reload')); if (fail) throw Error('download failed'); complete = true; },
-    match: async () => new Response('cached shell')
+    match: async key => new Response(key === './index.html?v=__CHECKY_BUILD__' ? entry : 'cached shell')
   };
   const self = { location: { origin: 'https://checky.example.com', href: 'https://checky.example.com/service-worker.js' },
     addEventListener: (type, handler) => { handlers[type] = handler; },
@@ -61,6 +62,9 @@ test('worker waits for a complete shell, preserves unrelated caches and never ca
   handlers.install({ waitUntil: p => { pending = p; } }); await pending; assert.ok(skipped);
   skipped = false; fail = true;
   handlers.install({ waitUntil: p => { pending = p; } }); await assert.rejects(pending, /download failed/); assert.equal(skipped, false);
+  fail = false;
+  entry = '<script src="./pwa.js?v=old"></script>';
+  handlers.install({ waitUntil: p => { pending = p; } }); await assert.rejects(pending, /different build/); assert.equal(skipped, false);
   handlers.activate({ waitUntil: p => { pending = p; } }); await pending; assert.deepEqual(deleted, ['checkys-pwa-v13']);
   for (const url of ['/api/checklists', '/version.json', '/service-worker.js', '/addons.json', '/desktop-updates/app.exe', 'https://external.example/']) {
     handlers.fetch({ request: { method: 'GET', url: new URL(url, self.location.origin).href }, respondWith: () => assert.fail('Must bypass the app cache: ' + url) });

@@ -385,6 +385,10 @@ base:
 - Added weekly setup to the tab menu and Edit week to configured tabs. Choose reminder days, time and a Sunday or Monday midnight reset. Setup reuses existing weekday rows while preserving other tasks.
 - Mark done records a dated occurrence in the Done archive. The next week opens with fresh unchecked days while dated history stays available. Checkmarks, schedules and history survive offline reopening and sync.
 
+## v0079 - 2026-11-15
+- Fixed the unresponsive Update now button during checklist sync. A tap waits for sync to finish, saves edits and opens the downloaded app.
+- Fixed repeated update prompts when a proxy serves an older start page. The service worker verifies the downloaded page and uses it when reopening the checklist.
+
 desktop:
 
 ## v0001 - 2026-04-07

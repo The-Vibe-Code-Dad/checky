@@ -70,16 +70,18 @@ async function main() {
         window.pendingTestSync = surface === 'base' ? runManualSync() : runSync();
       }, surface);
       await page.waitForFunction(() => !!window.resumeTestSync);
-      assert.equal(await page.locator('#app').evaluate(app => app.inert), true, 'Editing pauses while server changes are reconciled');
+      const editor = page.locator('#list');
+      const editingLocked = element => Boolean(element.closest('[inert]'));
+      assert.equal(await editor.evaluate(editingLocked), true, 'Editing pauses while server changes are reconciled');
       await page.evaluate(async () => { window.resumeTestSync(); await window.pendingTestSync; });
-      assert.equal(await page.locator('#app').evaluate(app => app.inert), false, 'Editing resumes after sync');
+      assert.equal(await editor.evaluate(editingLocked), false, 'Editing resumes after sync');
       await page.evaluate(surface => {
         const api = surface === 'base' ? window.checkyStorage : window.checkyApi;
         api.syncNow = async () => { throw Error('Test sync failure'); };
         window.failedTestSync = surface === 'base' ? runManualSync() : runSync();
       }, surface);
       await page.evaluate(() => window.failedTestSync);
-      assert.equal(await page.locator('#app').evaluate(app => app.inert), false, 'A network error also resumes editing');
+      assert.equal(await editor.evaluate(editingLocked), false, 'A network error also resumes editing');
       await page.evaluate(surface => { (surface === 'base' ? window.checkyStorage : window.checkyApi).syncNow = window.originalTestSync; }, surface);
       console.log('PASS ' + surface + ': stable sync snapshot and editing restored after success/failure');
 

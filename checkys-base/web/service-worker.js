@@ -1,8 +1,8 @@
 const BUILD = "__CHECKY_BUILD__";
 const CACHE_NAME = "checkys-pwa-" + BUILD;
+const APP_ENTRY = "./index.html?v=" + BUILD;
 const APP_SHELL = [
-  "./",
-  "./index.html",
+  APP_ENTRY,
   "./style.css?v=__CHECKY_BUILD__",
   "./checkys-base.css?v=__CHECKY_BUILD__",
   "./auth-client.js?v=__CHECKY_BUILD__",
@@ -53,9 +53,15 @@ self.addEventListener('message', event => {
 
 self.addEventListener('install', event => {
   // Publish the new worker only after the entire new shell is available offline.
-  event.waitUntil(caches.open(CACHE_NAME)
-    .then(cache => cache.addAll(APP_SHELL.map(url => new Request(url, { cache: 'reload' }))))
-    .then(() => self.skipWaiting()));
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.addAll(APP_SHELL.map(url => new Request(url, { cache: 'reload' })));
+    const entry = await cache.match(APP_ENTRY);
+    if (!(await entry.text()).includes('./pwa.js?v=' + BUILD + '"')) {
+      throw new Error('The downloaded app page belongs to a different build.');
+    }
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', event => {
@@ -74,10 +80,10 @@ self.addEventListener('fetch', event => {
     // Independently installed add-ons manage their own assets. Never substitute
     // the main app for a missing/uninstalled add-on or cache its pages here.
     if (!['/', '/index.html'].includes(url.pathname)) return;
-    event.respondWith(fetch(event.request, { cache: 'no-store' }).then(async response => {
-      if (!response.ok) throw new Error('App unavailable');
-      return response;
-    }).catch(() => caches.open(CACHE_NAME).then(cache => cache.match('./index.html'))));
+    // Reload into the shell this worker actually downloaded, even if a proxy
+    // still serves an older start page. The requested URL keeps its reminder parameters.
+    event.respondWith(caches.open(CACHE_NAME).then(async cache =>
+      (await cache.match(APP_ENTRY)) || fetch(event.request, { cache: 'no-store' })));
     return;
   }
 
