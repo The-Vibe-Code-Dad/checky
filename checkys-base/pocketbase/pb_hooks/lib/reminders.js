@@ -75,6 +75,14 @@ function dueItems(data, now, enabledAt) {
       // background database write/version bump that could conflict with edits.
       const checkedAt = Date.parse(item.reminderCheckedAt)
       const repeating = ['daily', 'weekly', 'monthly', 'yearly'].includes(item.reminderRepeat)
+      const calendar = tab.weeklyChecklist && require(__hooks + '/lib/reminder-schedule.js')
+      const weekday = calendar ? calendar.weeklyDay(tab, item.id) : -1
+      if (weekday >= 0) {
+        const schedule = tab.weeklyChecklist
+        if (!Array.isArray(schedule.days) || !schedule.days.includes(weekday)) continue
+        if (now >= calendar.weeklyResetAt(schedule, at)) continue
+        if (item.done && at < calendar.weeklyResetAt(schedule, checkedAt)) continue
+      }
       if (item.done && (!repeating || !Number.isFinite(checkedAt) || at <= checkedAt)) continue
       if (repeating && require(__hooks + '/lib/reminder-schedule.js').skipsOccurrence(item, at)) continue
       due.push({ id: item.id, at: new Date(at).toISOString(), text: String(item.text || 'Checklist event').slice(0, 160), tab: String(tab.name || '').slice(0, 120) })

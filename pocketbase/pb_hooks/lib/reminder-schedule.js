@@ -118,4 +118,30 @@ function resetOccurrence(item, checked) {
   const next = nextOccurrence(item, checked)
   return skipsOccurrence(item, next) ? nextOccurrence(item, next) : next
 }
-module.exports = { latestOccurrence, nextOccurrence, skipsOccurrence, resetOccurrence }
+// Compare calendar dates in the schedule's timezone, including weeks where
+// the UTC offset changes. The next week begins at its first real local instant.
+function weeklyResetAt(schedule, checked) {
+  if (!Number.isFinite(checked) || ![0, 1].includes(schedule?.resetDay)) return NaN
+  try {
+    const zone = new Timezone(schedule.timeZone)
+    if (zone.string() !== schedule.timeZone) return NaN
+    const localDate = at => new DateTime(new Date(at).toISOString()).time().in(zone).format('2006-01-02')
+    const date = new Date(localDate(checked) + 'T00:00:00Z')
+    date.setUTCDate(date.getUTCDate() + 7 - (date.getUTCDay() - schedule.resetDay + 7) % 7)
+    const target = date.toISOString().slice(0, 10)
+    const midnight = new DateTime(target + ' 00:00:00', schedule.timeZone).time().unixMilli()
+    if (localDate(midnight) === target && localDate(midnight - 1) < target) return midnight
+    let low = checked, high = checked + 9 * 86400000
+    while (high - low > 1) {
+      const middle = Math.floor((high + low) / 2)
+      if (localDate(middle) >= target) high = middle
+      else low = middle
+    }
+    return high
+  } catch (_) { return NaN }
+}
+function weeklyDay(tab, id) {
+  const schedule = tab.weeklyChecklist
+  return Array.isArray(schedule?.itemIds) ? schedule.itemIds.slice(0, 7).indexOf(id) : -1
+}
+module.exports = { latestOccurrence, nextOccurrence, skipsOccurrence, resetOccurrence, weeklyResetAt, weeklyDay }

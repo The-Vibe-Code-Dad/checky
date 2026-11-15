@@ -178,6 +178,12 @@ Sync tracks the server checklist version and the last synced checklist snapshot;
 
 Already accepted saves and navigation-only differences can catch up without another server write. The merged checklist is saved on the device so the next edit keeps the server's changes. Editing pauses during sync, and a pre-sync Safety copy remains available. If a conflict still needs review, export the local checklist before replacing it. Background saves retain their version checks; full reconciliation happens through the sync action, including the normal startup sync.
 
+### Weekly checklist tabs
+
+Hold or right-click a checklist tab and choose **Set up weekly checklist**. Pick Sunday or Monday as the reset day, select the weekdays to show, set the reminder time, and save. **Edit week** reopens this setup. Setup reuses existing weekday rows and keeps other tasks in the tab. Deselecting a day hides it and stops its reminders.
+
+Checking a day completes it for the current week. With **Settings > Show Done archive** enabled, **Mark done** moves that occurrence into Done with its completion time. At midnight on the reset day in the schedule's saved timezone, all selected days are available unchecked again, including after reopening offline. The dated entries stay in Done. Notifications use the existing per-browser opt-in.
+
 ### Event reminders and browser notifications
 
 The installed app checks for updates on opening, returning to the foreground, and reconnecting. Once the new files finish downloading, **Update now** appears above the checklist. Tap it to save local changes and reload; sign-in, checklists, preferences and notification subscriptions are retained. An open reminder/tab edit, active sync, or failed save prevents the reload. **Settings > App updates > Check for app updates** runs a check on demand. No uninstall or storage clearing is needed.

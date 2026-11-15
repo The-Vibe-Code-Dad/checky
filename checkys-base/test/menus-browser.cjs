@@ -30,7 +30,7 @@ async function main() {
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     browser = await chromium.launch({ executablePath: process.env.CHECKY_CHROMIUM_EXECUTABLE || undefined, headless: true, args: ['--no-sandbox'] });
     for (const surface of ['base', 'desktop']) {
-      const context = await browser.newContext({ viewport: { width: surface === 'base' ? 390 : 1100, height: 844 }, hasTouch: true });
+      const context = await browser.newContext({ timezoneId: 'America/New_York', viewport: { width: surface === 'base' ? 390 : 1100, height: 844 }, hasTouch: true });
       await context.addInitScript(() => {
         let checklist = { active: 0, tabs: [
           { id: 'alpha', name: 'Alpha', items: Array.from({ length: 12 }, (_, i) => ({ id: 'item-' + i, text: 'Task ' + i, done: false })) },
@@ -102,8 +102,9 @@ async function main() {
         else await label.click({ button: 'right' });
       }
 
+      await require('./weekly-browser.cjs').checkWeekly(page, openTab, surface);
       await openTab('Alpha', true);
-      assert.deepEqual(await menu.locator('button').allTextContents(), ['Rename', 'Move up', 'Move down', 'Always show', 'Delete']);
+      assert.deepEqual(await menu.locator('button').allTextContents(), ['Rename', 'Set up weekly checklist', 'Move up', 'Move down', 'Always show', 'Delete']);
       assert.equal(await menu.getByRole('button', { name: 'Move up', exact: true }).isDisabled(), true);
       assert.equal(await page.evaluate(() => state.data.tabs.length), 4, 'Releasing the hold must not delete/select a menu action');
       if (process.env.CHECKY_SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.CHECKY_SCREENSHOT_DIR, `tab-menu-${surface}.png`) });

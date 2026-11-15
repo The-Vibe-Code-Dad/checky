@@ -364,6 +364,22 @@ function save(e) {
         }
       }
       let changed = false;
+      // Older clients may omit weekly settings and archive links. Match by ID
+      // within the same tab so imports and deleted tasks do not revive a list.
+      const oldTabs = new Map(before.tabs.map(tab => [tab.id, tab]));
+      for (const tab of after.tabs) {
+        const oldTab = oldTabs.get(tab.id);
+        if (!oldTab) continue;
+        if (tab.weeklyChecklist === undefined && oldTab.weeklyChecklist) { tab.weeklyChecklist = oldTab.weeklyChecklist; changed = true; }
+        if (!oldTab.weeklyChecklist && oldTab.system !== 'done') continue;
+        const oldItems = new Map(oldTab.items.filter(Boolean).map(item => [item.id, item]));
+        for (const item of tab.items) {
+          const old = oldItems.get(item?.id);
+          if (!item || !old) continue;
+          if (item.weeklySourceId === undefined && old.weeklySourceId) { item.weeklySourceId = old.weeklySourceId; changed = true; }
+          if (item.done && item.weeklyArchivedAt === undefined && old.weeklyArchivedAt) { item.weeklyArchivedAt = old.weeklyArchivedAt; changed = true; }
+        }
+      }
       for (const tab of after.tabs) for (const item of tab.items) {
         if (item && typeof item === 'object' && reminders['item:' + item.id]) {
           const old = reminders['item:' + item.id];
@@ -398,7 +414,9 @@ function save(e) {
       if (!Object.prototype.hasOwnProperty.call(item, 'reminderCheckedAt') && !Object.prototype.hasOwnProperty.call(item, 'reminderResetAt') && !Object.prototype.hasOwnProperty.call(item, 'reminderSkipToday')) continue;
       const checked = Date.parse(item.reminderCheckedAt);
       const active = tab.system !== 'done' && item.done && Number.isFinite(checked) && require(__hooks + '/lib/reminder-state.js').repeating(item);
-      const reset = active ? require(__hooks + '/lib/reminder-schedule.js').resetOccurrence(item, checked) : NaN;
+      const calendar = require(__hooks + '/lib/reminder-schedule.js');
+      const reset = !active ? NaN : calendar.weeklyDay(tab, item.id) >= 0
+        ? calendar.weeklyResetAt(tab.weeklyChecklist, checked) : calendar.resetOccurrence(item, checked);
       const skipToday = !!active && item.reminderSkipToday === true;
       const checkedAt = active ? new Date(checked).toISOString() : null;
       const resetAt = Number.isFinite(reset) ? new Date(reset).toISOString() : null;

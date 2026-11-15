@@ -41,7 +41,7 @@ async function browser(email) {
       const r=await direct(url,{...opts,headers:{...opts.headers,...(cookie?{Cookie:cookie}:{}),Origin:base}});
       if(r.headers.get('set-cookie')) cookie=r.headers.get('set-cookie').split(';')[0]; return r;
     }});
-  for(const file of ['auth-client.js','reminder-state.js','mobile-storage.js']) vm.runInContext(await fs.readFile(path.join(root,'checkys-base/web',file),'utf8'),context,{filename:file});
+  for(const file of ['auth-client.js','reminder-state.js','weekly-checklist.js','mobile-storage.js']) vm.runInContext(await fs.readFile(path.join(root,'checkys-base/web',file),'utf8'),context,{filename:file});
   const storage=window.checkyStorage;
   if (!cookie) await storage.signInHostedSession(email,password);
   browserSessions.set(email, cookie);
@@ -104,6 +104,26 @@ const data = text=>({active:0,tabs:[{id:'stable-tab',name:'Tasks',items:[{id:'st
     const conflict=await desk.syncNow(data('conflicting desktop edit')); assert.equal(conflict.ok,false);
     pulled=await desk.pullChecklistFromRemote(); assert.equal(textOf(pulled.checklist),'winning Base edit');
     console.log('PASS stale desktop writes cannot overwrite newer Base edits');
+    // A managed day and its dated Done entry survive actual storage and sync on both clients.
+    const weekly = require('../web/weekly-checklist.js');
+    const weeklyTime = Date.parse('2030-03-09T18:00:00Z');
+    const weeklyTab = { id:'week', name:'Meds', items:[] }, history = {id:'history', name:'Done', system:'done', items:[]};
+    let serial = 0;
+    const id = () => 'weekly-test-' + (++serial);
+    weekly.configure(weeklyTab, {resetDay:1,time:'09:00',timeZone:'America/New_York',days:[1,5]}, id, 1000, weeklyTime);
+    weekly.archiveDay(weeklyTab, weeklyTab.items[0], history, id, 1000, weeklyTime);
+    const weekData = {active:0,tabs:[weeklyTab,history]};
+    await desk.saveChecklist(weekData); await desk.markLocalChecklistDirty();
+    const pushedWeek = await desk.syncNow(weekData); assert.equal(pushedWeek.ok,true,pushedWeek.message);
+    const roundTrip = await web.syncNow(); assert.equal(roundTrip.ok,true,roundTrip.message);
+    const savedWeek = roundTrip.checklist.tabs[0], savedEntry = roundTrip.checklist.tabs[1].items[0];
+    assert.deepEqual(JSON.parse(JSON.stringify(savedWeek.weeklyChecklist)), weeklyTab.weeklyChecklist);
+    assert.equal(savedEntry.weeklySourceId, savedWeek.items[0].id);
+    assert.equal(savedEntry.completedAt, savedWeek.items[0].weeklyArchivedAt);
+    assert.equal(savedWeek.items[0].reminderResetAt, '2030-03-11T04:00:00.000Z');
+    assert.equal(weekly.isChecked(savedWeek.items[0], savedWeek.weeklyChecklist, Date.parse(savedWeek.items[0].reminderResetAt)), false);
+    console.log('PASS weekly schedule, DST reset and timestamped Done record round trip');
+
     const clone = value => JSON.parse(JSON.stringify(value));
     for (const collection of ['checklists', 'shared_checklists']) {
       const recordId = collection === 'checklists' ? current.defaultChecklist : shared.id;
