@@ -143,6 +143,7 @@ const state = {
 };
 
 let saveTimer = null;
+let pendingManualSync = null;
 let lastChecklistSaveRequestId = 0;
 let draggedItemPointerIndex = null;
 let draggedTabPointerIndex = null;
@@ -927,9 +928,21 @@ function cancelPullSyncGesture(keepIndicator = false) {
   }
 }
 
-async function runManualSync(source = "settings") {
-  if (state.ui.syncInProgress) return;
+function runManualSync(source = "settings") {
+  if (pendingManualSync) return pendingManualSync;
+  if (state.ui.syncInProgress || document.getElementById("app").inert) return;
+  pendingManualSync = syncChecklist(source).finally(() => { pendingManualSync = null; });
+  return pendingManualSync;
+}
 
+function setSyncControlsBusy(busy) {
+  for (const region of [els.contentScroll, els.navDrawer, els.navToggle, els.navBackdrop]) {
+    region.inert = busy;
+  }
+  els.contentScroll.setAttribute("aria-busy", String(busy));
+}
+
+async function syncChecklist(source) {
   const didFlushPendingSave = await flushPendingSave();
   if (!didFlushPendingSave) {
     flashPullSyncIndicator("Failed to save checklist.", true, 1600);
@@ -940,9 +953,7 @@ async function runManualSync(source = "settings") {
   pullSyncFeedbackTimer = null;
   state.ui.syncInProgress = true;
   // Keep the submitted snapshot stable while sync may reconcile server changes.
-  const syncApp = document.getElementById("app");
-  syncApp.inert = true;
-  syncApp.setAttribute("aria-busy", "true");
+  setSyncControlsBusy(true);
   renderSettings();
   setPullSyncIndicator("Syncing...", {
     height: 52,
@@ -1009,8 +1020,7 @@ async function runManualSync(source = "settings") {
     flashPullSyncIndicator("Sync failed.", true, 1600);
   } finally {
     state.ui.syncInProgress = false;
-    syncApp.inert = false;
-    syncApp.removeAttribute("aria-busy");
+    setSyncControlsBusy(false);
     renderSettings();
     if (source !== "pull" && !pullSyncFeedbackTimer) {
       resetPullSyncIndicator();
@@ -2270,7 +2280,18 @@ async function editItemReminder(tabId, itemId) {
   if (saved) await runManualSync('reminder');
 }
 
-async function prepareForAppUpdate() {
+async function prepareForAppUpdate(showProgress) {
+  if (pendingManualSync) {
+    showProgress?.('Finishing checklist sync…');
+    let timer;
+    try {
+      await Promise.race([pendingManualSync, new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Sync is still running. Try Update now again in a moment.')), 30000);
+      })]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
   if (activeAddon && els.addonFrame.contentWindow?.checkyAddonBusy?.()) {
     throw new Error('Finish the open list edit before updating Checky.');
   }
@@ -2281,6 +2302,7 @@ async function prepareForAppUpdate() {
     throw new Error('Finish the open reminder or tab edit, then choose Update now.');
   }
   if (!hasHostedLoginCredentials()) return;
+  showProgress?.('Saving your checklist…');
   syncVisibleItemsToState();
   clearPendingSave();
   if (!await persistChecklistSnapshot(createChecklistSnapshot(), ++lastChecklistSaveRequestId, { updateStatus: false }) ||

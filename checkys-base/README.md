@@ -186,7 +186,7 @@ Checking a day completes it for the current week. With **Settings > Show Done ar
 
 ### Event reminders and browser notifications
 
-The installed app checks for updates on opening, returning to the foreground, and reconnecting. Once the new files finish downloading, **Update now** appears above the checklist. Tap it to save local changes and reload; sign-in, checklists, preferences and notification subscriptions are retained. An open reminder/tab edit, active sync, or failed save prevents the reload. **Settings > App updates > Check for app updates** runs a check on demand. No uninstall or storage clearing is needed.
+The installed app checks for updates on opening, returning to the foreground, and reconnecting. Once the new files finish downloading, **Update now** appears above the checklist. Tap it once. Checky waits for an ongoing checklist sync, saves local edits and opens the downloaded version. Sign-in, checklists, preferences and notification subscriptions carry over. If an edit is still open or saving fails, the banner explains what to do. **Settings > App updates > Check for app updates** runs a check on demand.
 
 For an older installation without these controls, update the Docker containers, then close the installed app and any open Checky browser tabs and reopen Checky online once. If the old page remains open, open the site in its browser and refresh to load the updater. Future updates are available inside the app.
 

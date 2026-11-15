@@ -6,6 +6,7 @@
   const checkButton = document.getElementById('appUpdateCheck');
   const updateButton = document.getElementById('appUpdateApply');
   let registration, registering, checking = false, applying = false, readyVersion = '', lastCheck = 0;
+  let serverVersion = '';
   function message(text) { status.textContent = text; }
   if (!window.isSecureContext || !('serviceWorker' in navigator)) {
     checkButton.disabled = true;
@@ -24,8 +25,14 @@
     });
   }
   async function refreshReady() {
-    const version = await workerVersion(registration?.active);
-    if (!version || version === BUILD) return false;
+    const worker = navigator.serviceWorker.controller;
+    const version = await workerVersion(worker);
+    if (applying || worker !== navigator.serviceWorker.controller || !version) return false;
+    if (version === BUILD || version !== serverVersion) {
+      readyVersion = '';
+      banner.hidden = true;
+      return false;
+    }
     readyVersion = version;
     banner.hidden = false;
     notice.textContent = 'A Checky update is ready.';
@@ -62,6 +69,7 @@
       if (!response.ok) throw new Error('The update check could not reach Checky. Try again when connected.');
       const latest = await response.json();
       if (typeof latest.version !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(latest.version)) throw new Error('The server did not return a valid app version. Try again later.');
+      serverVersion = latest.version;
       await reg.update();
       if (await refreshReady()) return;
       if (latest.version !== BUILD) message('Downloading the new version. Update now will appear when it is ready.');
@@ -79,8 +87,9 @@
     try {
       notice.textContent = 'Saving your checklist…';
       if (typeof window.checkyPrepareForUpdate !== 'function') throw new Error('Checky is still opening. Try Update now again in a moment.');
-      await window.checkyPrepareForUpdate();
+      await window.checkyPrepareForUpdate(text => { notice.textContent = text; });
       // No storage, cookies or push subscriptions are deleted by an app update.
+      notice.textContent = 'Opening the update…';
       window.location.reload();
     } catch (error) {
       notice.textContent = error.message || 'Could not save your checklist. Try Update now again.';
@@ -90,7 +99,12 @@
   }
   checkButton.onclick = () => { void check(true); };
   updateButton.onclick = () => { void apply(); };
-  navigator.serviceWorker.addEventListener('controllerchange', () => { void refreshReady(); });
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    void refreshReady();
+    // Another open Checky window may have downloaded a version we haven't checked yet.
+    lastCheck = 0;
+    void check();
+  });
   window.addEventListener('online', () => { lastCheck = 0; void check(); });
   window.addEventListener('pageshow', () => { void check(); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void check(); });

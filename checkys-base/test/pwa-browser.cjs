@@ -13,7 +13,7 @@ const password = 'Disposable-PWA-Only-20261104!';
 async function main() {
   if (!process.env.CHECKY_POCKETBASE_BINARY) throw Error('Set CHECKY_POCKETBASE_BINARY to a disposable test binary.');
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'checky-pwa-'));
-  let child, browser, server, log = '', activeBuild = 0, failAsset = false;
+  let child, browser, server, log = '', activeBuild = 0, failAsset = false, staleNavigation = false;
   const builds = [], versions = [];
   try {
     for (let i = 0; i < 3; i++) {
@@ -47,7 +47,8 @@ async function main() {
       }
       const pathname = new URL(req.url, 'http://localhost').pathname;
       if (failAsset && pathname === '/style.css') { res.writeHead(503); res.end(); return; }
-      const root = builds[activeBuild], filename = path.join(root, pathname === '/' ? 'index.html' : pathname);
+      const root = builds[staleNavigation && pathname === '/' ? 0 : activeBuild];
+      const filename = path.join(root, pathname === '/' ? 'index.html' : pathname);
       if (!filename.startsWith(root + path.sep)) { res.writeHead(404); res.end(); return; }
       try {
         const type = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.css': 'text/css', '.png': 'image/png', '.webmanifest': 'application/manifest+json' }[path.extname(filename)] || 'application/octet-stream';
@@ -180,15 +181,18 @@ async function main() {
     assert.match(await page.evaluate(() => window.checkyPrepareForUpdate().then(() => 'unexpected', error => error.message)), /Finish the open/);
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     await page.evaluate(() => { state.ui.syncInProgress = true; });
-    await page.locator('#appUpdateApply').click();
+    await page.locator('#appUpdateApply').tap();
     await page.waitForFunction(() => document.getElementById('appUpdateNotice').textContent.includes('current sync'));
     await page.evaluate(() => { state.ui.syncInProgress = false; window.testSaveChecklist = window.checkyStorage.saveChecklist; window.checkyStorage.saveChecklist = async () => { throw Error('Storage full'); }; });
-    await page.locator('#appUpdateApply').click();
+    await page.locator('#appUpdateApply').tap();
     await page.waitForFunction(() => document.getElementById('appUpdateNotice').textContent.includes('Could not save'));
     assert.equal(navigations, 0); assert.equal(await page.locator('#app').evaluate(el => el.inert), false);
     await page.evaluate(() => { window.checkyStorage.saveChecklist = window.testSaveChecklist; document.querySelector('#list textarea').value = 'Last edit before updating'; });
-    await page.locator('#appUpdateApply').click();
+    // A proxy can serve the old start page even after the new shell is downloaded.
+    staleNavigation = true;
+    await page.locator('#appUpdateApply').tap();
     await page.waitForFunction(version => document.querySelector('script[src*="pwa.js"]')?.src.includes(version), versions[1]);
+    staleNavigation = false;
     await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
     assert.equal(await page.locator('#list textarea').inputValue(), 'Last edit before updating');
     assert.equal(await page.locator('#loginOverlay').isVisible(), false);
@@ -225,12 +229,25 @@ async function main() {
     await page.locator('#navToggle').click(); await page.locator('#settingsToggle').click();
     await page.locator('#appUpdateCheck').click();
     await page.locator('#appUpdateBanner').waitFor({ state: 'visible' });
-    await page.locator('#appUpdateApply').click();
+    // Hold a real sync open as it would be on a slow mobile connection.
+    await page.evaluate(() => {
+      const sync = window.checkyStorage.syncNow;
+      window.checkyStorage.syncNow = async (...args) => {
+        await new Promise(resolve => { window.finishSlowSync = resolve; });
+        return sync(...args);
+      };
+      void runManualSync();
+    });
+    await page.waitForFunction(() => !!window.finishSlowSync);
+    await page.locator('#appUpdateApply').tap({ timeout: 3000 });
+    await page.waitForFunction(() => /finishing.*sync/i.test(document.getElementById('appUpdateNotice').textContent));
+    assert.ok((await page.locator('script[src*="pwa.js"]').getAttribute('src')).includes(versions[1]));
+    await page.evaluate(() => window.finishSlowSync());
     await page.waitForFunction(version => document.querySelector('script[src*="pwa.js"]')?.src.includes(version), versions[2]);
     await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
     assert.equal(await page.locator('#appUpdateBanner').isVisible(), false);
     assert.deepEqual(errors, []);
-    console.log('PASS manual update check, recovery after failed deployment, and no repeat reload prompt');
+    console.log('PASS one tap during a real sync applies the downloaded update, including recovery after a failed deployment');
     await checkDoneArchive(page, browser, origin, password);
     assert.deepEqual(errors, []);
   } catch (error) { console.error(log); throw error; }
