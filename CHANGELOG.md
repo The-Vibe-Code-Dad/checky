@@ -392,6 +392,9 @@ base:
 - Fixed the unresponsive Update now button during checklist sync. A tap waits for sync to finish, saves edits and opens the downloaded app.
 - Fixed repeated update prompts when a proxy serves an older start page. The service worker verifies the downloaded page and uses it when reopening the checklist.
 
+## v0080 - 2026-11-15
+- Weekly days now use the regular checklist’s checkbox, shaded name field and three-line control. Tap the control or hold a day for Mark done and Edit week. The reminder time appears in Edit week.
+
 desktop:
 
 ## v0001 - 2026-04-07
@@ -536,6 +539,9 @@ desktop:
 
 ## v0040 - 2026-11-15
 - Added weekly checklist setup, weekday checkboxes, timestamped Done entries and weekly resets to the desktop source. Connected desktops sync the same schedule and history as Base.
+
+## v0041 - 2026-11-15
+- Matched weekly days to the desktop checklist layout and moved Mark done into the day’s options menu.
 
 pocketbase:
 

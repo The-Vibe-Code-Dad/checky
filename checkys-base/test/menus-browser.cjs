@@ -104,7 +104,7 @@ async function main() {
         else await label.click({ button: 'right' });
       }
 
-      await require('./weekly-browser.cjs').checkWeekly(page, openTab, surface);
+      await require('./weekly-browser.cjs').checkWeekly(page, openTab, surface, hold, release);
       await openTab('Alpha', true);
       assert.deepEqual(await menu.locator('button').allTextContents(), ['Rename', 'Set up weekly checklist', 'Move up', 'Move down', 'Always show', 'Delete']);
       assert.equal(await menu.getByRole('button', { name: 'Move up', exact: true }).isDisabled(), true);

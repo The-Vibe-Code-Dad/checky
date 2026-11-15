@@ -1,9 +1,12 @@
 const assert = require('node:assert/strict');
 
-async function checkWeekly(page, openTab, surface) {
+async function checkWeekly(page, openTab, surface, hold, release) {
   const original = await page.evaluate(() => JSON.parse(JSON.stringify(state.data)));
   const rows = page.locator('.week-row');
   const visibleDays = () => rows.locator('label').allTextContents();
+  const menu = page.locator('#itemContextMenu');
+  const options = day => rows.getByRole('button', { name: 'Options for ' + day, exact: true });
+  const markDone = () => menu.getByRole('button', { name: 'Mark done', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Weekly checklist' });
   const choose = day => dialog.getByRole('group', { name: 'Remind me on' }).getByRole('button', { name: day, exact: true }).click();
   const save = async () => {
@@ -24,7 +27,19 @@ async function checkWeekly(page, openTab, surface) {
   assert.deepEqual(await visibleDays(), ['Monday','Wednesday','Friday']);
   assert.equal(await rows.getByRole('checkbox', {name:'Wednesday'}).isChecked(), true, 'Adopt checked weekday');
   assert.equal(await page.locator('#list textarea').inputValue(), 'Keep this task');
-  await page.getByRole('button', {name:'Mark Friday done',exact:true}).click();
+  assert.equal(await rows.getByText('08:15').count(), 0);
+  assert.equal(await rows.getByRole('button', {name: 'Mark done'}).count(), 0);
+  const dayField = rows.locator('label').first();
+  const ordinaryField = page.locator('#list textarea');
+  const background = element => getComputedStyle(element).backgroundColor;
+  assert.equal(await dayField.evaluate(background), await ordinaryField.evaluate(background));
+  assert.equal((await dayField.boundingBox()).x, (await ordinaryField.boundingBox()).x);
+  await hold(dayField); await release();
+  assert.equal(await menu.isVisible(), true);
+  assert.equal(await rows.getByRole('checkbox', {name: 'Monday'}).isChecked(), false);
+  await page.keyboard.press('Escape');
+  await options('Friday').tap();
+  await markDone();
   assert.deepEqual(await visibleDays(), ['Monday','Wednesday']);
   const record = await page.evaluate(() => state.data.tabs.find(tab => tab.system === 'done').items.find(item => item.weeklySourceId));
   assert.equal(record.completedAt, '2030-03-09T18:00:00.000Z');
@@ -46,7 +61,8 @@ async function checkWeekly(page, openTab, surface) {
   await choose('Wednesday'); await choose('Sunday'); await save();
   assert.deepEqual(await visibleDays(), ['Monday','Friday','Sunday']);
   await rows.getByRole('checkbox',{name:'Friday'}).check();
-  await page.getByRole('button',{name:'Mark Sunday done'}).click();
+  await rows.locator('label').filter({hasText: /^Sunday$/}).click({button:'right'});
+  await markDone();
   await page.clock.setFixedTime(new Date('2030-03-11T04:00:00Z'));
   await page.evaluate(() => refreshRepeatingCheckboxes());
   assert.deepEqual(await visibleDays(), ['Monday','Friday','Sunday']);
@@ -66,12 +82,23 @@ async function checkWeekly(page, openTab, surface) {
     undoDoneItem(done.items.findIndex(item => item.weeklySourceId === 'day-3'));
   });
   assert.equal(await rows.getByRole('checkbox',{name:'Friday'}).isChecked(),true);
-  await page.getByRole('button',{name:'Mark Sunday done'}).click();
+  await options('Sunday').press('Enter');
+  assert.equal(await menu.getByRole('button', {name:'Mark done'}).evaluate(el => el === document.activeElement), true);
+  await page.keyboard.press('Enter');
   await page.evaluate(() => {
     const done = state.data.tabs[getDoneTabIndex()];
     undoDoneItem(done.items.findLastIndex(item => item.weeklySourceId === 'day-0'));
   });
   assert.equal(await rows.getByRole('checkbox',{name:'Sunday'}).isChecked(),false);
+  await options('Monday').tap();
+  await menu.getByRole('button', {name:'Edit week', exact:true}).click();
+  assert.equal(await dialog.locator('input[type=time]').inputValue(), '08:15');
+  await dialog.getByRole('button', {name:'Cancel'}).click();
+  await page.evaluate(() => { state.settings.showDoneTab = false; render(); });
+  await options('Monday').tap();
+  await markDone();
+  assert.equal(await rows.getByRole('checkbox', {name:'Monday'}).isChecked(), true);
+  await page.evaluate(() => { state.settings.showDoneTab = true; });
   await page.evaluate(value => { state.ui.doneViewOpen=false; state.data=value; render(); persistChecklistImmediately(); }, original);
   await page.clock.setSystemTime(new Date());
   console.log('PASS ' + surface + ': weekday adoption, filtering, timestamped Done history, Sunday/Monday midnight reset, DST and reopen');
