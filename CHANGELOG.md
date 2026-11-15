@@ -381,6 +381,9 @@ base:
 - Persisted reconciled checklists locally so later saves retain server changes, paused editing during sync, and clarified conflict feedback. Server versions and snapshots remain authoritative; device timestamps do not select a winner.
 - Passed eight merge regressions, real personal/shared Base and desktop sync checks, browser interaction checks, web build/cache and desktop security tests, and the complete installed-web update/Done archive suite. Changes are local; no hosted deployment was performed.
 
+## v0077 - 2026-11-15
+- Checked Pee and Poop boxes show a blue tick in saved Baby entries and in the entry editor.
+
 ## v0078 - 2026-11-15
 - Added weekly setup to the tab menu and Edit week to configured tabs. Choose reminder days, time and a Sunday or Monday midnight reset. Setup reuses existing weekday rows while preserving other tasks.
 - Mark done records a dated occurrence in the Done archive. The next week opens with fresh unchecked days while dated history stays available. Checkmarks, schedules and history survive offline reopening and sync.

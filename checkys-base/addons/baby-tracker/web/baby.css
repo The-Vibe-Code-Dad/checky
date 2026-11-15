@@ -54,6 +54,24 @@ textarea{resize:vertical;white-space:pre-wrap}
 .check{display:flex;flex-direction:row;align-items:center;gap:8px;min-height:44px;font-size:15px}
 input[type=checkbox]{width:21px;height:21px;accent-color:var(--accent);margin:0;flex-shrink:0}
 .diaper-summary input:disabled{opacity:1}
+@media (forced-colors: none) {
+  .check input:checked {
+    appearance: none;
+    display: grid;
+    place-items: center;
+    background: var(--bg);
+    border: 2px solid var(--accent);
+    border-radius: 4px;
+  }
+  .check input:checked::before {
+    content: "";
+    width: 5px;
+    height: 10px;
+    border: solid var(--accent);
+    border-width: 0 3px 3px 0;
+    transform: translateY(-1px) rotate(45deg);
+  }
+}
 .empty{margin:6px 0 10px;color:var(--muted);font-size:14px}
 #loadMore{margin-top:12px}
 #login{max-width:420px;background:var(--panel);padding:22px;border-radius:12px}
