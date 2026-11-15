@@ -182,7 +182,7 @@ Already accepted saves and navigation-only differences can catch up without anot
 
 Hold or right-click a checklist tab and choose **Set up weekly checklist**. Pick Sunday or Monday as the reset day, select the weekdays to show, set the reminder time, and save. **Edit week** reopens this setup. Setup reuses existing weekday rows and keeps other tasks in the tab. Deselecting a day hides it and stops its reminders.
 
-Checking a day completes it for the current week. With **Settings > Show Done archive** enabled, **Mark done** moves that occurrence into Done with its completion time. At midnight on the reset day in the schedule's saved timezone, all selected days are available unchecked again, including after reopening offline. The dated entries stay in Done. Notifications use the existing per-browser opt-in.
+Checking a day completes it for the current week. To keep a dated entry, enable **Settings > Show Done archive**, tap the three-line button beside the day and choose **Mark done**. At midnight on the reset day in the schedule's saved timezone, all selected days are available unchecked again, including after reopening offline. The dated entries stay in Done. Notifications use the existing per-browser opt-in.
 
 ### Event reminders and browser notifications
 

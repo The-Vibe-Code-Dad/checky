@@ -172,7 +172,7 @@
     archive.items.push({ id: createId('item'), text: tab.name + ' · ' + item.text, done: true,
       originalTabName: tab.name, completedAt: item.completedAt, weeklySourceId: item.id });
   }
-  function renderRows(list, tab, editWeek, toggle, markDone) {
+  function renderRows(list, tab, editWeek, toggle, openMenu) {
     const schedule = normalize(tab.weeklyChecklist);
     if (!schedule) return null;
     const header = document.createElement('div'); header.className = 'week-header';
@@ -187,16 +187,39 @@
       const item = tab.items[index];
       if (archivedThisWeek(item, schedule)) continue;
       const row = document.createElement('div'); row.className = 'week-row'; row.dataset.itemIndex = index;
-      const label = document.createElement('label');
-      const box = document.createElement('input'); box.type = 'checkbox'; box.checked = isChecked(item, schedule);
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.id = 'weekly-day-' + day;
+      box.checked = isChecked(item, schedule);
       box.onchange = () => toggle(item.id, box.checked);
-      const clock = document.createElement('small'); clock.textContent = schedule.time;
-      label.append(box, document.createTextNode(names[day])); row.append(label, clock);
-      if (markDone) {
-        const button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-ghost';
-        button.textContent = 'Mark done'; button.setAttribute('aria-label', 'Mark ' + names[day] + ' done');
-        button.onclick = () => markDone(item.id); row.append(button);
+
+      const label = document.createElement('label');
+      label.htmlFor = box.id;
+      label.textContent = names[day];
+
+      const options = document.createElement('button');
+      options.type = 'button';
+      options.className = 'drag-handle week-menu-button';
+      options.setAttribute('aria-label', 'Options for ' + names[day]);
+      options.setAttribute('aria-controls', 'itemContextMenu');
+      for (let i = 0; i < 3; i++) {
+        const line = document.createElement('span');
+        line.className = 'line';
+        options.append(line);
       }
+      options.onclick = event => {
+        event.stopPropagation();
+        const bounds = options.getBoundingClientRect();
+        openMenu(index, bounds.left, bounds.bottom);
+        if (event.detail === 0) document.querySelector('#itemContextMenu button')?.focus();
+      };
+      window.checkyContextMenu.bindHold(label, (x, y) => openMenu(index, x, y));
+      row.oncontextmenu = event => {
+        event.preventDefault();
+        event.stopPropagation();
+        openMenu(index, event.clientX, event.clientY);
+      };
+      row.append(box, label, options);
       list.append(row);
     }
     return new Set(schedule.itemIds);

@@ -1190,6 +1190,15 @@ function renderItemContextMenu() {
     return btn;
   };
 
+  if (sourceTab.weeklyChecklist?.itemIds.includes(item.id)) {
+    els.itemContextMenu.append(
+      createMenuButton("Mark done", () => { closeItemContextMenu(); markWeeklyDayDone(sourceTab, item); }),
+      createMenuButton("Edit week", () => { closeItemContextMenu(); editWeeklyTab(sourceTab.id); })
+    );
+    positionContextMenu(menuState);
+    return;
+  }
+
   els.itemContextMenu.appendChild(
     createMenuButton("Move up", () => moveItemByOffset(menuState.tabIndex, menuState.itemIndex, -1), !canMoveUp)
   );
@@ -1775,15 +1784,19 @@ function renderWeeklyRows(tab) {
     if (!current) return;
     window.checkyWeekly.setChecked(current, checked);
     persistChecklistImmediately();
-  }, state.settings.showDoneTab ? id => {
-    const source = state.data.tabs[state.data.active], item = source?.items.find(entry => entry.id === id);
-    const archive = state.data.tabs[getDoneTabIndex()];
-    if (!item || !archive) return;
-    try { window.checkyWeekly.archiveDay(source, item, archive, createEntityId, MAX_ITEMS_PER_TAB); }
+  }, (index, x, y) => openItemContextMenu(state.data.active, index, x, y));
+}
+
+function markWeeklyDayDone(tab, item) {
+  const archive = state.settings.showDoneTab && state.data.tabs[getDoneTabIndex()];
+  if (archive) {
+    try { window.checkyWeekly.archiveDay(tab, item, archive, createEntityId, MAX_ITEMS_PER_TAB); }
     catch (error) { window.alert(error.message); return; }
-    renderItems();
-    persistChecklistImmediately();
-  } : null);
+  } else {
+    window.checkyWeekly.setChecked(item, true);
+  }
+  renderItems();
+  persistChecklistImmediately();
 }
 
 function renderItems() {
