@@ -346,13 +346,12 @@ function validate(app, record) {
   const owner = record.getString('owner');
   if (owner && getCombinedPayloadSizeBytes(app, name, record.id, payload, 'owner = {:owner}', {owner}) > PER_USER_LIMITS[settings.perUserPreset]) throw new BadRequestError('Combined hosted checklist data for this user exceeds the per-user size limit.');
 }
-function save(e) {
-  if (e.type === 'update') {
-    const previous = e.record.original();
+function prepareChecklist(record, previous) {
+  if (previous) {
     // Older desktop/PWA builds omit unknown task fields on save. An omitted
     // reminder keeps its existing value; updated clients clear it with null.
     const before = normalizeChecklistPayload(previous.get('data'));
-    const after = normalizeChecklistPayload(e.record.get('data'));
+    const after = normalizeChecklistPayload(record.get('data'));
     if (isChecklistPayload(before) && isChecklistPayload(after)) {
       const reminders = {};
       for (const tab of before.tabs) for (const item of tab.items) {
@@ -381,7 +380,7 @@ function save(e) {
         }
       }
       for (const tab of after.tabs) for (const item of tab.items) {
-        if (item && typeof item === 'object' && reminders['item:' + item.id]) {
+        if (typeof item?.id === 'string' && reminders['item:' + item.id]) {
           const old = reminders['item:' + item.id];
           for (const field of ['reminderAt', 'reminderRepeat', 'reminderTimeZone', 'reminderDays']) {
             if (!Object.prototype.hasOwnProperty.call(item, field)) {
@@ -391,28 +390,30 @@ function save(e) {
           }
           if (!Object.prototype.hasOwnProperty.call(item, 'reminderCheckedAt')) {
             item.reminderCheckedAt = !item.done ? null : !old.done && tab.system !== 'done' && !item.completedAt &&
-              require(__hooks + '/lib/reminder-state.js').repeating(item) ? new Date().toISOString() : old.reminderCheckedAt;
+              typeof item.reminderAt === 'string' && require(__hooks + '/lib/reminder-state.js').repeating(item) ? new Date().toISOString() : old.reminderCheckedAt;
             changed = true;
           }
           if (!Object.prototype.hasOwnProperty.call(item, 'reminderSkipToday')) {
-            const checked = Date.parse(item.reminderCheckedAt);
-            item.reminderSkipToday = !!item.done && Number.isFinite(checked) && checked === Date.parse(old.reminderCheckedAt) && old.reminderSkipToday;
+            const checked = typeof item.reminderCheckedAt === 'string' ? Date.parse(item.reminderCheckedAt) : NaN;
+            item.reminderSkipToday = !!item.done && Number.isFinite(checked) && typeof old.reminderCheckedAt === 'string' && checked === Date.parse(old.reminderCheckedAt) && old.reminderSkipToday;
             changed = true;
           }
         }
       }
-      if (changed) e.record.set('data', after);
+      if (changed) record.set('data', after);
     }
-    // Access revocation must remain possible even for legacy over-quota data.
-    if (previous.getString('data') === e.record.getString('data') && previous.getString('owner') === e.record.getString('owner')) return e.next();
   }
-  const completionData = normalizeChecklistPayload(e.record.get('data'));
+  const completionData = normalizeChecklistPayload(record.get('data'));
   if (isChecklistPayload(completionData)) {
+    const { validReminder } = require(__hooks + '/lib/reminders.js');
     let changed = false;
     for (const tab of completionData.tabs) for (const item of tab.items) {
       if (!item || typeof item !== 'object') continue;
+      if (item.reminderAt != null && !validReminder(item)) {
+        throw new BadRequestError('Invalid scheduled reminder. Check the item ID, text and reminder date.');
+      }
       if (!Object.prototype.hasOwnProperty.call(item, 'reminderCheckedAt') && !Object.prototype.hasOwnProperty.call(item, 'reminderResetAt') && !Object.prototype.hasOwnProperty.call(item, 'reminderSkipToday')) continue;
-      const checked = Date.parse(item.reminderCheckedAt);
+      const checked = typeof item.reminderCheckedAt === 'string' ? Date.parse(item.reminderCheckedAt) : NaN;
       const active = tab.system !== 'done' && item.done && Number.isFinite(checked) && require(__hooks + '/lib/reminder-state.js').repeating(item);
       const calendar = require(__hooks + '/lib/reminder-schedule.js');
       const reset = !active ? NaN : calendar.weeklyDay(tab, item.id) >= 0
@@ -424,8 +425,21 @@ function save(e) {
         item.reminderCheckedAt = checkedAt; item.reminderResetAt = resetAt; item.reminderSkipToday = skipToday; changed = true;
       }
     }
-    if (changed) e.record.set('data', completionData);
+    if (changed) record.set('data', completionData);
   }
+}
+
+function save(e) {
+  const record = e.record;
+  const original = e.type === 'update' ? record.original() : null;
+  if (original) record.ignoreUnchangedFields(true);
+  const dataChanged = !original || original.getString('data') !== record.getString('data');
+  const version = record.getFloat('version');
+  const versionChanged = !original || original.getFloat('version') !== version;
+  const ownerChanged = !original || original.getString('owner') !== record.getString('owner');
+  // Revoking access must also work for old, over-quota or malformed checklists.
+  if (!dataChanged && !versionChanged && !ownerChanged) return e.next();
+
   // Initial schema migrations create these collections in stages, before the API starts.
   try {
     if (!e.app.findCollectionByNameOrId('checky_base_sessions').fields.getByName('credentialStamp')) return e.next();
@@ -436,7 +450,19 @@ function save(e) {
   try {
     return originalApp.runInTransaction((tx) => {
       e.app = tx;
-      validate(tx, e.record);
+      const stored = original ? tx.findRecordById(record.collection().id, record.id) : null;
+      // Membership may have been revoked after the API checked this request.
+      if (stored && !require(__hooks + '/lib/shared-access.js').sameAccess(original, stored)) {
+        throw new BadRequestError('Checklist access changed. Pull the latest checklist before saving.');
+      }
+      if (versionChanged || dataChanged) {
+        const expected = stored ? stored.getFloat('version') + 1 : 1;
+        if (!Number.isSafeInteger(version) || version !== expected || (original && original.getFloat('version') + 1 !== version)) {
+          throw new BadRequestError('Invalid checklist version. Pull the latest checklist before saving.');
+        }
+      }
+      if (dataChanged) prepareChecklist(record, stored);
+      if (dataChanged || ownerChanged) validate(tx, record);
       return e.next();
     });
   } finally { e.app = originalApp; }

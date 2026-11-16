@@ -61,31 +61,45 @@ function logout(e) {
   if (!key) return
   for (const record of e.app.findRecordsByFilter(SUBS, 'sessionKey = {:key}', '', 0, 0, { key })) e.app.delete(record)
 }
+// Missing text is supported by older checklists and uses the default notification body.
+function validReminder(item) {
+  return typeof item?.id === 'string' && item.id.length > 0 &&
+    typeof item.reminderAt === 'string' && Number.isFinite(Date.parse(item.reminderAt)) &&
+    (item.text == null || typeof item.text === 'string') &&
+    (item.reminderCheckedAt == null || typeof item.reminderCheckedAt === 'string')
+}
+function dueReminder(tab, item, now, enabledAt) {
+  if (!validReminder(item)) return null
+  const at = item.reminderRepeat && item.reminderRepeat !== 'none'
+    ? require(__hooks + '/lib/reminder-schedule.js').latestOccurrence(item, now)
+    : Date.parse(item.reminderAt)
+  if (!Number.isFinite(at) || at > now || at < enabledAt || at < now - 86400000) return null
+  // A checked repeating item reopens for its next occurrence without a
+  // background database write/version bump that could conflict with edits.
+  const checkedAt = Date.parse(item.reminderCheckedAt)
+  const repeating = ['daily', 'weekly', 'monthly', 'yearly'].includes(item.reminderRepeat)
+  const calendar = tab.weeklyChecklist && require(__hooks + '/lib/reminder-schedule.js')
+  const weekday = calendar ? calendar.weeklyDay(tab, item.id) : -1
+  if (weekday >= 0) {
+    const schedule = tab.weeklyChecklist
+    if (!Array.isArray(schedule.days) || !schedule.days.includes(weekday)) return null
+    if (now >= calendar.weeklyResetAt(schedule, at)) return null
+    if (item.done && at < calendar.weeklyResetAt(schedule, checkedAt)) return null
+  }
+  if (item.done && (!repeating || !Number.isFinite(checkedAt) || at <= checkedAt)) return null
+  if (repeating && require(__hooks + '/lib/reminder-schedule.js').skipsOccurrence(item, at)) return null
+  return { id: item.id, at: new Date(at).toISOString(), text: (item.text || 'Checklist event').slice(0, 160), tab: tab.name.slice(0, 120) }
+}
 function dueItems(data, now, enabledAt) {
   const due = []
-  for (const tab of data?.tabs || []) {
-    if (tab.system === 'done') continue
-    for (const item of tab.items || []) {
-      if (!item?.id || typeof item.reminderAt !== 'string') continue
-      const at = item.reminderRepeat && item.reminderRepeat !== 'none'
-        ? require(__hooks + '/lib/reminder-schedule.js').latestOccurrence(item, now)
-        : Date.parse(item.reminderAt)
-      if (!Number.isFinite(at) || at > now || at < enabledAt || at < now - 86400000) continue
-      // A checked repeating item reopens for its next occurrence without a
-      // background database write/version bump that could conflict with edits.
-      const checkedAt = Date.parse(item.reminderCheckedAt)
-      const repeating = ['daily', 'weekly', 'monthly', 'yearly'].includes(item.reminderRepeat)
-      const calendar = tab.weeklyChecklist && require(__hooks + '/lib/reminder-schedule.js')
-      const weekday = calendar ? calendar.weeklyDay(tab, item.id) : -1
-      if (weekday >= 0) {
-        const schedule = tab.weeklyChecklist
-        if (!Array.isArray(schedule.days) || !schedule.days.includes(weekday)) continue
-        if (now >= calendar.weeklyResetAt(schedule, at)) continue
-        if (item.done && at < calendar.weeklyResetAt(schedule, checkedAt)) continue
-      }
-      if (item.done && (!repeating || !Number.isFinite(checkedAt) || at <= checkedAt)) continue
-      if (repeating && require(__hooks + '/lib/reminder-schedule.js').skipsOccurrence(item, at)) continue
-      due.push({ id: item.id, at: new Date(at).toISOString(), text: String(item.text || 'Checklist event').slice(0, 160), tab: String(tab.name || '').slice(0, 120) })
+  if (!Array.isArray(data?.tabs)) return due
+  for (const tab of data.tabs) {
+    if (typeof tab?.name !== 'string' || tab.system === 'done' || !Array.isArray(tab.items)) continue
+    for (const item of tab.items) {
+      try {
+        const reminder = dueReminder(tab, item, now, enabledAt)
+        if (reminder) due.push(reminder)
+      } catch (_) { /* Skip this legacy item if its stored schedule cannot be evaluated. */ }
     }
   }
   return due
@@ -152,4 +166,4 @@ function deliver(app) {
     }
   } finally { app.store().set('checkyPushRunningUntil', 0) }
 }
-module.exports = { status, subscribe, unsubscribe, logout, deliver, dueItems }
+module.exports = { status, subscribe, unsubscribe, logout, deliver, dueItems, validReminder }

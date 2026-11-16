@@ -43,6 +43,12 @@ async function main() {
     await fs.cp(path.join(__dirname, '../pocketbase/pb_hooks'), path.join(dir, 'hooks'), { recursive: true });
     await fs.writeFile(path.join(dir, 'hooks/test-reminders.pb.js'), `
 routerAdd('POST', '/api/checky-test/reminders/run', (e) => { require(__hooks + '/lib/reminders.js').deliver(e.app); return e.json(200, {ok:true}) }, $apis.requireSuperuserAuth())
+// Seed the stored shape accepted by older servers, bypassing the current write checks.
+routerAdd('POST', '/api/checky-test/reminders/legacy', (e) => {
+  e.app.db().newQuery("UPDATE shared_checklists SET data = json_set(data, '$.tabs[0].items[0].text', json_object('toString', NULL)) WHERE id = {:id}")
+    .bind({id:e.requestInfo().body.id}).execute()
+  return e.json(200, {ok:true})
+}, $apis.requireSuperuserAuth())
 routerAdd('POST', '/api/checky-test/reminders/calendar', (e) => {
   const results = e.requestInfo().body.cases.map(test => require(__hooks + '/lib/reminders.js').dueItems(
     {tabs:[{name:'Events',weeklyChecklist:test.weeklyChecklist,items:[test.item]}]}, Date.parse(test.now), Date.parse(test.enabledAt || '2000-01-01T00:00:00Z')).map(item => item.at))
@@ -263,6 +269,28 @@ routerAdd('POST', '/api/checky-test/reminders/next', (e) => e.json(200, {results
     login.data.token = (await req('/api/collections/users/auth-with-password', 'POST', { identity: alice.email, password: password + '-new' })).data.token;
     assert.ok(login.data.token);
     console.log('PASS password reset revokes push subscriptions; the server-wide pause stops delivery');
+    const bobAuth = await req('/api/collections/users/impersonate/' + bob.id, 'POST', {duration:60}, ah);
+    assert.equal(bobAuth.status, 200, JSON.stringify(bobAuth.data));
+    const endpoints = [];
+    for (const [user, token] of [[alice, login.data.token], [bob, bobAuth.data.token]]) {
+      const endpoint = subscription.endpoint + '-' + user.id;
+      endpoints.push(endpoint);
+      assert.equal((await req('/api/checkys-base/push', 'POST', {subscription:{...subscription, endpoint}}, {Authorization:token})).status, 200);
+    }
+    const now = new Date().toISOString();
+    const items = data([{id:'legacy', reminderAt:now}, {id:'deliverable', reminderAt:now}]);
+    const list = await req('/api/collections/shared_checklists/records', 'POST', {
+      owner:bob.id, sharedWith:[alice.id], shareKey:'legacy-reminders', name:'Legacy reminders', data:items, version:1
+    }, ah);
+    assert.equal(list.status, 200, JSON.stringify(list.data));
+    assert.equal((await req('/api/checky-test/reminders/legacy', 'POST', {id:list.data.id}, ah)).status, 200);
+    outcome = {ok:true};
+    const beforeRun = sent.length;
+    await run();
+    const deliveriesAfter = sent.slice(beforeRun);
+    assert.deepEqual(deliveriesAfter.map(send => send.payload.body), ['deliverable', 'deliverable']);
+    assert.deepEqual(deliveriesAfter.map(send => send.subscription.endpoint).sort(), endpoints.sort());
+    console.log('PASS a malformed legacy reminder is skipped and both subscribers receive the next reminder');
     config.publicOrigin = 'https://checky.example.com';
     await fs.writeFile(configFile, JSON.stringify(config));
     assert.equal((await req('/api/checkys-base/session/login', 'POST', { token: login.data.token }, { Origin: base })).status, 403);

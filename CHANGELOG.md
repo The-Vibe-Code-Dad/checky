@@ -395,6 +395,11 @@ base:
 ## v0080 - 2026-11-15
 - Weekly days now use the regular checklist’s checkbox, shaded name field and three-line control. Tap the control or hold a day for Mark done and Edit week. The reminder time appears in Edit week.
 
+## v0081 - 2026-11-15
+- Personal and shared checklist edits must advance exactly one version. Concurrent edits to the same version have one winner. The upgrade repairs oversized counters that could freeze sync.
+- The backend rejects malformed reminder text on save and skips malformed stored reminders during delivery so other items and subscribers still receive notifications.
+- Removing a shared member also clears their assignment. Editing a profile can no longer restore access. The upgrade clears old assignments for users who already lost access.
+
 desktop:
 
 ## v0001 - 2026-04-07
@@ -695,3 +700,6 @@ pocketbase:
 
 ## v0042 - 2026-11-15
 - Added weekly-tab calendar boundaries to reminder delivery and acknowledgement, and preserved weekly settings and archive links on older-client saves. Sunday/Monday resets use the saved timezone without scheduled database writes.
+
+## v0043 - 2026-11-15
+- Applied the same checklist version, reminder delivery and shared-access fixes to standalone PocketBase. The migration repairs oversized checklist versions and removes stale assignments while preserving checklist content and current members.
