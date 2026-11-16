@@ -7,6 +7,53 @@
   }
 }
 
+# The legacy client refuses redirects and only installs bytes matching its signed manifest.
+# A bundled installer is served locally. Other images relay only the pinned release file.
+(release_request) {
+  method GET
+  header_up -*
+  header_up User-Agent Checky-Desktop-Update
+  transport http {
+    response_header_timeout 15s
+  }
+}
+
+(desktop_release) {
+  @fetchInstaller {
+    method GET HEAD
+    path /desktop-updates/{args[2]}
+    not file {path}
+  }
+  handle @fetchInstaller {
+    header Content-Disposition attachment
+    header Content-Type application/octet-stream
+    header Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+    rewrite * /{args[0]}/releases/download/{args[1]}/{args[2]}?
+    reverse_proxy https://github.com {
+      import release_request
+      @redirect status 302
+      handle_response @redirect {
+        @asset vars_regexp asset {rp.header.Location} ^https://release-assets[.]githubusercontent[.]com(/github-production-release-asset/[^#]+)$
+        handle @asset {
+          rewrite * {re.asset.1}
+          reverse_proxy https://release-assets.githubusercontent.com {
+            import release_request
+            header_down -*
+            @failure status 3xx 4xx 5xx
+            handle_response @failure {
+              respond 502
+            }
+          }
+        }
+        respond 502
+      }
+      handle_response {
+        respond 502
+      }
+    }
+  }
+}
+
 :80 {
   encode gzip zstd
 
@@ -49,7 +96,10 @@
         Content-Security-Policy "frame-ancestors 'self'; object-src 'none'; base-uri 'self'"
       }
       root * /srv
-      file_server
+      route {
+        import /etc/caddy/desktop-feed*.caddy
+        file_server
+      }
     }
   }
 }

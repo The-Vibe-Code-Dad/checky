@@ -102,12 +102,12 @@ The web image has two rolling variants:
 
 | Web image tag | Contents |
 | --- | --- |
-| `ghcr.io/the-vibe-code-dad/checky-web:latest` | Base web app only |
+| `ghcr.io/the-vibe-code-dad/checky-web:latest` | Base web app and signed update feed. Fetches the selected Windows installer on demand. |
 | `ghcr.io/the-vibe-code-dad/checky-web:latestwapp` | The same Base web app plus the selected Windows x64 installer and signed `latest.json` |
 
 In CasaOS, edit the **web** container's image tag to `latestwapp`, then pull and recreate that container. Keep the **pocketbase** image on `latest`; the backend and sync model are identical for both variants. Both web variants support AMD64 and ARM64 servers; the included desktop installer is for Windows x64.
 
-Docker downloads the EXE inside the `latestwapp` image. Each Base server then serves it at `/desktop-updates/` on its own HTTPS origin, preserving existing desktop signature, checksum, origin, and size checks. Installing a new web image also replaces its bundled desktop release. A desktop already on the bundled version will not offer a redundant update.
+On `latest` and `latestbaby`, Base relays the selected installer from the official GitHub Release when an old desktop requests it. Both feed URLs stay on the connected Base origin. On hosts without outbound GitHub access, use the bundled variant. Docker downloads the EXE inside the `latestwapp` image. Each Base server then serves it at `/desktop-updates/` on its own HTTPS origin, preserving existing desktop signature, checksum, origin, and size checks. Installing a new web image also replaces its bundled desktop release. A desktop already on the bundled version will not offer a redundant update.
 
 ### Downloading the installer after `git pull`
 
@@ -410,7 +410,9 @@ Installer binaries and generated manifests remain ignored by Git and excluded fr
 
 Desktop 1.0.7 and later require a valid signature and HTTPS on both the manifest and same-origin installer, reject redirects, limit the manifest to 64 KB and the installer to 500 MB while reading, and verify SHA-256 before opening the installer. HTTP remains available for local checklist sync; it cannot deliver automatic updates. For the first upgrade from a desktop older than 1.0.7, install the [current trusted release](https://github.com/The-Vibe-Code-Dad/checky/releases/latest) directly: older clients cannot enforce the new signature policy.
 
-Connected desktop apps check this manifest quietly at startup and whenever their window is opened. A compact `Update` button appears in the desktop top-right controls only when the Base manifest advertises a version newer than the installed desktop version. Users can also run an immediate manual check from the desktop Settings page.
+On an installed Windows 1.0.8 desktop connected to Base, reopen the window and click **Update**, or choose **Settings → Check for updates → Download and install**. Confirm to open Windows setup for Checky Desktop 2. The old app verifies the download and exits. Complete setup, then start **Checky Desktop**. Old local checklists stay in the Electron profile and are imported when opening the new local workspace. Hosted users sign in again. A standalone 1.x installation with no connected Base can use the official installer directly.
+
+Recreate the Base web container with the new image to publish the feed. If a source install mounts its own `/srv/desktop-updates` directory, refresh that directory with `node scripts/download-desktop-release.cjs` before recreating the container.
 
 ## Canonical Source
 
