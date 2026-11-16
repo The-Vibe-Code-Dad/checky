@@ -27,7 +27,7 @@ jobs:
           - os: windows-latest
             bundles: nsis
             target: x86_64-pc-windows-msvc
-          - os: macos-latest
+          - os: macos-26-intel
             bundles: dmg
             target: universal-apple-darwin
           - os: ubuntu-24.04
@@ -54,6 +54,24 @@ jobs:
           node prepare-desktop.cjs
           cargo test --locked --manifest-path src-tauri/Cargo.toml
           npm run build -- --bundles ${{ matrix.bundles }} --target ${{ matrix.target }} -- --locked
+      - name: Test Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem checkys-app/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+          $dir = Join-Path $env:RUNNER_TEMP 'checky-installed'
+          $install = Start-Process $setup.FullName -ArgumentList "/S /D=$dir" -PassThru -Wait
+          if ($install.ExitCode -ne 0 -or !(Test-Path "$dir/checky-desktop.exe")) { throw "Windows installer failed." }
+      - name: Verify the universal app inside the Mac disk image
+        if: runner.os == 'macOS'
+        run: |
+          image=(checkys-app/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
+          mount=$(mktemp -d)
+          hdiutil attach -readonly -nobrowse -mountpoint "$mount" "${image[0]}"
+          trap 'hdiutil detach "$mount"' EXIT
+          app=$(find "$mount" -maxdepth 1 -name '*.app' -print -quit)
+          lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/checky-desktop"
+          codesign --verify --deep --strict "$app"
       - name: Collect installers
         shell: bash
         run: |
