@@ -407,6 +407,9 @@ base:
 ## v0083 - 2026-11-16
 - Tasks and weekly checklists can alert again at a chosen interval until checked. Desktop browsers offer a platform installer on the first visit and keep the link in Settings. The with-app images offer the signed Windows upgrade from Electron to Checky Desktop 2.0.0.
 
+## v0084 - 2026-11-16
+- Serve the signed Windows upgrade on every Base image. Standard images relay the selected release on demand and with-app images serve their bundled copy.
+
 desktop:
 
 ## v0001 - 2026-04-07
@@ -557,6 +560,9 @@ desktop:
 
 ## v0042 - 2026-11-16
 - Checky Desktop 2 uses a Rust/Tauri wrapper for the hosted web app and bundles the canonical web interface for local checklists. It includes a configurable global shortcut, tray, native reminders, and Windows, macOS and Linux builds.
+
+## v0043 - 2026-11-16
+- The legacy Windows renderer offers the migration to Checky Desktop during an update check and saves pending edits before opening setup. The released 1.0.8 uses its existing Update button and confirmation.
 
 pocketbase:
 
