@@ -52,6 +52,26 @@ const data = text => ({active:0,tabs:[{id:'tab',name:'Tasks',items:[{id:'task',t
   assert.equal((await request('/api/collections/shared_checklists/records/'+shared.data.id,'PATCH',{data:data('shared Base'),version:3},ch)).status,200);
   assert.equal((await request('/api/collections/shared_checklists/records/'+shared.data.id,'GET',undefined,bh)).data.data.tabs[0].items[0].text,'shared Base');
   check('shared checklist compatibility and admin-controlled assignment');
+  const sharedPath = '/api/collections/shared_checklists/records/' + shared.data.id;
+  for (const path of ['/api/collections/' + cid + '/records/' + id, sharedPath]) {
+    for (const invalid of [{version:5}, {version:4.5}, {version:2 ** 53, data:data('invalid jump')}]) {
+      assert.equal((await request(path, 'PATCH', invalid, bh)).status, 400);
+    }
+    const malformed = data({toString:null});
+    malformed.tabs[0].items[0].reminderAt = new Date().toISOString();
+    assert.equal((await request(path, 'PATCH', {data:malformed, version:4}, ch)).status, 400);
+    assert.equal((await request(path, 'GET', undefined, bh)).data.version, 3);
+  }
+  check('personal and shared checklists reject version jumps and malformed reminders without advancing the version');
+  const competing = ['desktop edit', 'Base edit'];
+  const responses = await Promise.all(competing.map((edit, i) =>
+    request(sharedPath, 'PATCH', {data:data(edit), version:4}, i ? ch : bh)));
+  assert.equal(responses.filter(r => r.status === 200).length, 1);
+  assert.ok(responses.some(r => [400, 404].includes(r.status)));
+  const winner = await request(sharedPath, 'GET', undefined, ch);
+  assert.equal(winner.data.version, 4);
+  assert.equal(winner.data.data.tabs[0].items[0].text, competing[responses.findIndex(r => r.status === 200)]);
+  check('a normal edit still syncs and concurrent saves of the same revision have one winner');
   for(const collection of ['checklists',cid]) assert.equal((await request('/api/collections/'+collection+'/records/'+id,'PATCH',{data:{invalid:true},version:4},ch)).status,400);
   const owned=await request('/api/collections/shared_checklists/records','POST',{shareKey:'quota-'+suffix,name:'Quota',owner:alice.id,version:1,data:data('x'.repeat(600000))},ah);
   assert.equal(owned.status,200,JSON.stringify(owned.data));
@@ -107,7 +127,20 @@ const data = text => ({active:0,tabs:[{id:'tab',name:'Tasks',items:[{id:'task',t
   const fresh = await request('/api/collections/users/auth-with-password','POST',{identity:alice.email,password:password+'-new'});
   const freshHeaders = {Authorization:fresh.data.token};
   assert.equal((await request('/api/collections/shared_checklists/records/'+shared.data.id,'GET',undefined,freshHeaders)).status,200);
-  await request('/api/collections/users/records/'+alice.id,'PATCH',{assignedSharedChecklist:''},ah);
+  const alicePath = '/api/collections/users/records/' + alice.id;
+  const bobPath = '/api/collections/users/records/' + bob.id;
+  assert.equal((await request(bobPath, 'PATCH', {assignedSharedChecklist:shared.data.id}, ah)).status, 200);
+  assert.equal((await request(sharedPath, 'PATCH', {sharedWith:[]}, ah)).status, 200);
+  assert.equal((await request(alicePath, 'GET', undefined, ah)).data.assignedSharedChecklist, '');
+  assert.equal((await request(bobPath, 'GET', undefined, ah)).data.assignedSharedChecklist, shared.data.id);
+  assert.equal((await request(alicePath, 'PATCH', {name:'Updated profile'}, freshHeaders)).status, 200);
+  assert.equal((await request(sharedPath, 'GET', undefined, freshHeaders)).status, 404);
+  assert.equal((await request(sharedPath, 'PATCH', {version:5, data:data('revoked')}, freshHeaders)).status, 404);
+  assert.deepEqual((await request(sharedPath, 'GET', undefined, ah)).data.sharedWith, []);
+  check('revoking membership clears the assignment and an ordinary profile edit cannot regain read or write access');
+  assert.equal((await request(alicePath, 'PATCH', {assignedSharedChecklist:shared.data.id}, ah)).status, 200);
+  assert.equal((await request(sharedPath, 'GET', undefined, freshHeaders)).status, 200);
+  assert.equal((await request(alicePath, 'PATCH', {assignedSharedChecklist:''}, ah)).status, 200);
   assert.equal((await request('/api/collections/shared_checklists/records/'+shared.data.id,'GET',undefined,freshHeaders)).status,404);
   check('removing an assignment revokes shared checklist access');
   console.log('All backend security and sync protocol checks passed.');
