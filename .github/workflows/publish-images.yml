@@ -53,6 +53,7 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/checky-browser" --no-save --ignore-scripts --no-audit --no-fund playwright@1.64.1
           node "$RUNNER_TEMP/checky-browser/node_modules/playwright/cli.js" install --with-deps chromium
+          CHECKY_PLAYWRIGHT_MODULE="$RUNNER_TEMP/checky-browser/node_modules/playwright" node checkys-base/test/legacy-upgrade-prompt.cjs
           CHECKY_PLAYWRIGHT_MODULE="$RUNNER_TEMP/checky-browser/node_modules/playwright" node checkys-base/test/menus-browser.cjs
           CHECKY_PLAYWRIGHT_MODULE="$RUNNER_TEMP/checky-browser/node_modules/playwright" CHECKY_POCKETBASE_BINARY="$RUNNER_TEMP/checky-pocketbase" node checkys-base/test/pwa-browser.cjs
           CHECKY_PLAYWRIGHT_MODULE="$RUNNER_TEMP/checky-browser/node_modules/playwright" CHECKY_POCKETBASE_BINARY="$RUNNER_TEMP/checky-pocketbase" node checkys-base/test/baby-tracker.cjs
@@ -60,6 +61,10 @@ jobs:
         run: |
           docker build -t checky-web-regression -f checkys-base/web.Dockerfile checkys-base
           docker run --rm checky-web-regression caddy validate --config /etc/caddy/Caddyfile
+          container=$(docker create checky-web-regression)
+          docker cp "$container:/usr/bin/caddy" "$RUNNER_TEMP/caddy"
+          docker rm "$container"
+          node checkys-base/test/desktop-relay.cjs "$RUNNER_TEMP/caddy"
       - name: Test CasaOS first-user setup through the web entrypoint
         run: node checkys-base/test/casaos-stack.cjs
       - name: Build and test separately installed Baby tracker
@@ -75,9 +80,26 @@ jobs:
           docker build -t checky-web-app-baby-regression --build-arg BASE_WEB_IMAGE=checky-web-baby-regression:latest -f checkys-base/web-with-app.Dockerfile checkys-base/.desktop-release
           CHECKY_TEST_WEB_IMAGE=checky-web-app-baby-regression:latest CHECKY_TEST_POCKETBASE_IMAGE=checky-pocketbase-baby-regression:latest CHECKY_TEST_WITH_APP=true CHECKY_TEST_BABY=true node checkys-base/test/casaos-stack.cjs
 
+  legacy-windows-upgrade:
+    name: Upgrade the released Windows desktop
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+      - shell: pwsh
+        run: |
+          npm install --prefix "$env:RUNNER_TEMP/checky-browser" --no-save --ignore-scripts --no-audit --no-fund playwright-core@1.64.1
+          $env:CHECKY_PLAYWRIGHT_MODULE = "$env:RUNNER_TEMP/checky-browser/node_modules/playwright-core"
+          ./checkys-base/test/legacy-windows-upgrade.ps1
+
   attach-update-manifest:
     name: Attach verified Windows update manifest
-    needs: validate
+    needs: [validate, legacy-windows-upgrade]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.repository == 'The-Vibe-Code-Dad/checky'
     runs-on: ubuntu-latest
     permissions:
@@ -109,7 +131,7 @@ jobs:
 
   publish:
     name: Publish AMD64 and ARM64 images
-    needs: validate
+    needs: [validate, legacy-windows-upgrade]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.repository == 'The-Vibe-Code-Dad/checky'
     runs-on: ubuntu-latest
     timeout-minutes: 30

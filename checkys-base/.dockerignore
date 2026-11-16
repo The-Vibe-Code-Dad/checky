@@ -5,6 +5,12 @@
 !web.Dockerfile
 !scripts/
 !scripts/build-web.cjs
+!desktop-release.json
+!scripts/desktop-feed.cjs
+!scripts/download-desktop-release.cjs
+!scripts/lib/
+!scripts/lib/desktop-update.cjs
+!scripts/lib/update-public-key.json
 web/desktop-updates/
 **/.env
 **/.env.*

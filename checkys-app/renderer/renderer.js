@@ -2034,53 +2034,63 @@ async function reloadBackups() {
   });
 }
 
+let lastUpgradeOffer = "";
+
+function isDesktopMigration(update) {
+  return update?.updateAvailable && /^1\./.test(update.currentVersion) && Number(update.latestVersion.split(".")[0]) >= 2;
+}
+
 async function refreshDesktopUpdate({ silent = true } = {}) {
   if (state.ui.updateInProgress) return state.desktopUpdate;
   if (!normalizeServerUrl(state.settings?.advanced?.serverUrl)) return null;
-
-  if (!silent) {
-    state.ui.updateInProgress = true;
-    renderSettings();
-  }
-
+  state.ui.updateInProgress = true;
+  if (!silent) renderSettings();
+  let result;
   try {
-    const result = await window.checkyApi.checkForUpdates();
+    result = await window.checkyApi.checkForUpdates();
     state.desktopUpdate = result;
-    renderSettings();
-    if (!silent) {
-      setStatus(result?.message || "Update check finished.");
-    }
-    return result;
+    if (!silent) setStatus(result?.message || "Update check finished.");
   } catch (error) {
     if (!silent) {
       state.desktopUpdate = {
         updateAvailable: false,
         message: error?.message || "Could not check for updates."
       };
-      renderSettings();
       setStatus(state.desktopUpdate.message, true);
     }
-    return null;
   } finally {
-    if (!silent) {
-      state.ui.updateInProgress = false;
-      renderSettings();
+    state.ui.updateInProgress = false;
+    renderSettings();
+  }
+  if (isDesktopMigration(result) && /Windows NT/.test(navigator.userAgent)) {
+    let offered = lastUpgradeOffer;
+    try { offered = localStorage.getItem("checky.desktop.upgrade-offered") || offered; } catch {}
+    if (!silent || (document.hasFocus() && offered !== result.latestVersion)) {
+      lastUpgradeOffer = result.latestVersion;
+      try { localStorage.setItem("checky.desktop.upgrade-offered", lastUpgradeOffer); } catch {}
+      await installAvailableDesktopUpdate();
     }
   }
+  return result || null;
 }
 
 async function installAvailableDesktopUpdate() {
   if (!state.desktopUpdate?.updateAvailable || state.ui.updateInProgress) return;
-  const approved = window.confirm(
-    `Download Checky's List ${state.desktopUpdate.latestVersion} from Checky Base, verify it, open the Windows installer, and close this app?`
-  );
+  const {latestVersion} = state.desktopUpdate;
+  const migration = isDesktopMigration(state.desktopUpdate);
+  const approved = window.confirm(migration
+    ? `Install Checky Desktop ${latestVersion}? Checky will verify the download, open Windows setup, and close this app. Your saved checklist stays on this computer.`
+    : `Download Checky's List ${latestVersion} from Checky Base, verify it, open the Windows installer, and close this app?`);
   if (!approved) return;
-
   state.ui.updateInProgress = true;
   state.ui.updateInstalling = true;
   state.desktopUpdate.message = `Downloading Checky's List ${state.desktopUpdate.latestVersion}...`;
   renderSettings();
   try {
+    if (!await flushPendingSave()) {
+      debounceSaveChecklist();
+      throw new Error("Could not save your checklist. Try installing again after it saves.");
+    }
     const result = await window.checkyApi.installUpdate();
     state.desktopUpdate = result;
     renderSettings();

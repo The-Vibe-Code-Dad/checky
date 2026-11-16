@@ -26,7 +26,7 @@ async function downloadAsset(url, limit, fetchImpl) {
   throw new Error('Too many release asset redirects.');
 }
 
-async function downloadRelease({config, outputDir, fetchImpl = fetch, key = publicKey}) {
+async function readRelease(config, fetchImpl = fetch, key = publicKey) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(config.repository || '') ||
       !/^\d+\.\d+\.\d+$/.test(config.version || '') || config.tag !== 'desktop-v' + config.version) {
     throw new Error('Invalid desktop release selection.');
@@ -43,6 +43,11 @@ async function downloadRelease({config, outputDir, fetchImpl = fetch, key = publ
       manifest.downloadUrl !== '/desktop-updates/' + fileName || !/^[a-f0-9]{64}$/.test(manifest.sha256)) {
     throw new Error('Signed manifest does not match the selected desktop release.');
   }
+  return {root, fileName, manifest, manifestBytes};
+}
+
+async function downloadRelease({config, outputDir, fetchImpl = fetch, key = publicKey}) {
+  const {root, fileName, manifest, manifestBytes} = await readRelease(config, fetchImpl, key);
   const installer = await downloadAsset(root + fileName, 500 * 1024 * 1024, fetchImpl);
   if (!installer.length || crypto.createHash('sha256').update(installer).digest('hex') !== manifest.sha256) {
     throw new Error('Installer checksum does not match the signed release manifest.');
@@ -73,4 +78,4 @@ if (require.main === module) {
     console.log('Release staging directory: ' + outputDir);
   }).catch(error => { console.error(error.message); process.exitCode = 1; });
 }
-module.exports = {downloadRelease, downloadAsset};
+module.exports = {downloadRelease, downloadAsset, readRelease};

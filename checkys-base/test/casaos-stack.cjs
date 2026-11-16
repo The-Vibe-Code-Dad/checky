@@ -72,20 +72,23 @@ const compose = args => docker(['compose', '-p', project, '-f', file, ...args]);
       assert.match(babyPage.headers.get('content-security-policy'), /frame-ancestors 'self'/);
     }
     const updateResponse = await request('/desktop-updates/latest.json');
-    if (process.env.CHECKY_TEST_WITH_APP === 'true') {
-      assert.equal(updateResponse.status, 200);
-      const update = await updateResponse.json();
-      const {verifyManifest} = require('../scripts/lib/desktop-update.cjs');
-      verifyManifest(update, require('../scripts/lib/update-public-key.json').publicKey);
-      assert.equal(update.version, require('../desktop-release.json').version);
-      const installer = await request(update.downloadUrl, {signal:AbortSignal.timeout(30000)});
-      assert.equal(installer.status, 200);
-      const digest = require('node:crypto').createHash('sha256').update(Buffer.from(await installer.arrayBuffer())).digest('hex');
-      assert.equal(digest, update.sha256);
-      console.log('PASS bundled installer and signed manifest served correctly through Base');
-    } else {
-      assert.equal(updateResponse.status, 404, 'Base-only image must not contain a desktop update payload');
-    }
+    assert.equal(updateResponse.status, 200);
+    assert.match(updateResponse.headers.get('cache-control'), /no-store/);
+    const update = await updateResponse.json();
+    const {verifyManifest} = require('../scripts/lib/desktop-update.cjs');
+    verifyManifest(update, require('../scripts/lib/update-public-key.json').publicKey);
+    assert.equal(update.version, require('../desktop-release.json').version);
+    const bundled = process.env.CHECKY_TEST_WITH_APP === 'true';
+    const files = compose(['exec', '-T', 'web', 'ls', '/srv/desktop-updates']).trim().split(/\s+/);
+    assert.equal(files.includes(update.fileName), bundled);
+    const installer = await request(update.downloadUrl, {redirect:'error', signal:AbortSignal.timeout(60000)});
+    assert.equal(installer.status, 200);
+    assert.match(installer.headers.get('content-disposition'), /attachment/);
+    const digest = require('node:crypto').createHash('sha256').update(Buffer.from(await installer.arrayBuffer())).digest('hex');
+    assert.equal(digest, update.sha256);
+    assert.equal((await request('/desktop-updates/unlisted.exe')).status, 404);
+    assert.equal((await request(update.downloadUrl, {method:'POST'})).status, bundled ? 405 : 404);
+    console.log('PASS signed legacy Windows upgrade through Base (' + (bundled ? 'bundled' : 'on demand') + ')');
     let session = await (await request('/api/checkys-base/session')).json();
     assert.equal(session.setupRequired, true, 'fresh database must offer first-user creation through Caddy');
     assert.equal(session.authenticated, false);
