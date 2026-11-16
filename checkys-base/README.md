@@ -404,7 +404,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish-deskto
   -ReleaseNotes "What changed in this release."
 ```
 
-The helper prepares the installer and `latest.json` in `web/desktop-updates/`, calculating SHA-256 and signing the release metadata with Ed25519. Upload only those two files as assets of a `desktop-v<VERSION>` GitHub Release. Update `desktop-release.json` to select that published version, then push to `main` to build the new `latestwapp` image. This selection deliberately stays pinned until changed; an unrelated release cannot silently replace the bundled updater.
+The Desktop workflow publishes the Windows, macOS and Linux installers as a versioned GitHub Release. Sign the published Windows installer with the helper. Put the resulting public `latest.json` object in the `signedManifest` field of `desktop-release.json`, select its version and tag, and push the selector to main. CI verifies the signature and installer hash, attaches `latest.json` to the release, and builds the `latestwapp` images. Older release selectors read the signed manifest directly from their GitHub Release.
 
 Installer binaries and generated manifests remain ignored by Git and excluded from the regular web Docker context. Only the verified staging directory enters the with-app image. Keep the existing signing key private and reuse it for future releases. This update signature is independent of Windows Authenticode; a Windows signing certificate is not configured in this repository.
 

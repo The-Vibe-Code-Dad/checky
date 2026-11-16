@@ -32,7 +32,11 @@ async function downloadRelease({config, outputDir, fetchImpl = fetch, key = publ
     throw new Error('Invalid desktop release selection.');
   }
   const root = 'https://github.com/' + config.repository + '/releases/download/' + config.tag + '/';
-  const manifestBytes = await downloadAsset(root + 'latest.json', 64 * 1024, fetchImpl);
+  // The signed manifest can ship with the selector while its GitHub asset is being attached.
+  const manifestBytes = config.signedManifest
+    ? Buffer.from(JSON.stringify(config.signedManifest, null, 2) + '\n')
+    : await downloadAsset(root + 'latest.json', 64 * 1024, fetchImpl);
+  if (manifestBytes.length > 64 * 1024) throw new Error('Desktop manifest is too large.');
   const manifest = verifyManifest(JSON.parse(manifestBytes.toString('utf8')), key);
   const fileName = 'checkys-list-' + config.version + '-x64.exe';
   if (manifest.version !== config.version || manifest.fileName !== fileName ||
