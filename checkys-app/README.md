@@ -12,6 +12,6 @@ Quit the earlier app to release its global shortcut. When Local checklist is ope
 
 ### Development and packaging
 
-Install stable Rust, Node and the Tauri 2 system prerequisites for the target OS. From `checkys-app/` run `npm ci` and `npm start`. Use `npm run build -- --bundles nsis` on Windows, `--bundles dmg --target universal-apple-darwin` on macOS (install both Apple Rust targets), or `--bundles deb,appimage` on Linux. Build outputs are under `src-tauri/target`. The Desktop workflow builds and tests each platform and publishes all installers together for a new version. Older Windows clients consume the separately signed Checky update manifest.
+Install stable Rust, Node and the Tauri 2 system prerequisites for the target OS. From `checkys-app/` run `npm ci` and `npm start`. Use `npm run build -- --bundles nsis` on Windows, `--bundles dmg --target universal-apple-darwin` on macOS (install both Apple Rust targets), or `--bundles deb,appimage` on Linux. Build outputs are under `src-tauri/target`. The Desktop workflow builds and tests each platform and publishes all installers together for a new version. The macOS bundle uses an ad-hoc code signature and has no Apple notarization ticket. Older Windows clients consume the separately signed Checky update manifest.
 
 The original Electron sources remain for compatibility tests and migration reference. New interface features belong in `checkys-base/web/`.
