@@ -1,58 +1,17 @@
-# Checky's List Desktop
+# Checky Desktop
 
-`checkys-app/` is the Electron desktop version of Checky's List.
+Checky Desktop 2 wraps Checky Base in a Rust/Tauri window on Windows, macOS and Linux. Choose your hosted Checky address on first launch to use the same sign-in, shared lists, add-ons, reminders and web updates as your browser. For a standalone checklist, choose **Local checklist on this computer**. That interface is built from `checkys-base/web` and opens without a server.
 
-The folder name is `checkys-app`. The packaged desktop app now uses the display name `Checky's List`, while Windows build artifacts use the safe slug `checkys-list`.
+Use **Settings → Checky Desktop** or the tray menu to change the server, switch workspaces, or change the global show/hide shortcut. Checky initially tries Ctrl+Space (Command+Space on Mac). The tray menu also works when the OS already uses the shortcut. On a Wayland desktop that reserves global hotkeys, assign `checky-desktop --toggle` to a system shortcut.
 
-## What It Does
+Enable **Settings → Event reminders → Notification settings** in the wrapper for native notifications from the open checklist, including while hidden in the tray. Set **Repeat until checked (minutes)** on a reminder or in **Edit week**. Quit exits the native reminder scheduler. Browser Web Push subscriptions remain separately configurable on each browser.
 
-- Opens a desktop checklist window
-- Supports an always-on-top widget-style workflow
-- Can be shown or hidden with a global hotkey
-- Adds a system tray icon for quick access
-- Stores checklist data and settings locally
-- Keeps a small rolling set of local JSON backups
-- Optionally syncs personal and shared checklists through Checky Base/PocketBase
-- Checks the connected Checky Base server for verified desktop installer updates
+### Upgrading from Electron
 
-## Quick Start
+Quit the earlier app to release its global shortcut. When Local checklist is opened for the first time, Checky looks for the old desktop data/checkTabs.json in the standard Electron profile and copies its checklist into the new webview. For a custom storage location, use Export JSON in the old app and Import JSON in the new one. Hosted accounts sign in again using their Checky server. The local checklist and each hosted origin have separate storage.
 
-From `checkys-app/`:
+### Development and packaging
 
-```powershell
-npm install
-npm run start
-```
+Install stable Rust, Node and the Tauri 2 system prerequisites for the target OS. From `checkys-app/` run `npm ci` and `npm start`. Use `npm run build -- --bundles nsis` on Windows, `--bundles dmg --target universal-apple-darwin` on macOS (install both Apple Rust targets), or `--bundles deb,appimage` on Linux. Build outputs are under `src-tauri/target`. The Desktop workflow builds and tests each platform and publishes all installers together for a new version. Older Windows clients consume the separately signed Checky update manifest.
 
-To build Windows packages:
-
-```powershell
-npm run pack:win
-```
-
-## Project Layout
-
-- `main.js` Electron main-process logic, storage, tray behavior, and window setup
-- `preload.js` IPC bridge between Electron and the renderer
-- `renderer/` desktop UI files
-- `build/` packaging resources for Windows builds
-
-## Notes
-
-- The desktop app is local-first and continues working without a server.
-- When connected, it uses the same personal/shared checklist model as Checky Base.
-- Sync compares the last synced snapshot and server version with both current copies. Different-task edits can merge during Sync now/startup sync; conflicting edits to the same task remain local for review. Device timestamps do not choose a winner. Confirmed new-task recovery still has a preview, and merged server changes are saved locally before the next edit. Editing pauses during sync; export a backup before replacing a conflicting local copy.
-- Personal and Shared are collapsible folder rows in the tab colors, with the active checklist's tabs nested inside. Opening a folder with one checklist loads it; folders with several checklists let you choose which one to open. Drag folders or use their arrow buttons to reorder them, and use existing tab drag handles to reorder tabs within their checklist.
-- Choose **Edit > Always show** on a tab to keep it above collapsed folders and available when another checklist is open. Folder order and always-shown tabs are saved for this account on this desktop. Connection settings remain in Settings.
-- Update checks and installation are user initiated. The app re-reads `desktop-updates/latest.json`, downloads only from the connected Base origin, enforces a 500 MB limit, verifies the published SHA-256 checksum, opens the verified Windows installer, and then closes itself.
-- The app checks quietly at startup and whenever its window is opened from the tray, hotkey, or another launch. When Base advertises a newer version, an `Update` button appears in the top-right window controls; Settings retains the manual `Check for updates` and install controls.
-
-
-
-## Security and updates (1.0.7)
-
-Electron is updated to 45.2.1. Native PocketBase login supports MFA with an emailed verification-code prompt. Personal/shared sync, local data, and per-device checklist selection remain compatible with Checky Base.
-
-Automatic updates now require HTTPS, an Ed25519 signature from the pinned release key, and a matching SHA-256 installer checksum. Redirects and oversized downloads are rejected. Local HTTP checklist sync is still supported. Install 1.0.7 directly from a trusted installer to establish the signature policy; older versions cannot verify it. Release manifests are prepared with the signing publisher under `checkys-base/scripts`.
-
-Development uses Node.js 22 or later. `npm test` exercises authentication/signing boundaries; `../checkys-base/test/test-security.ps1` runs actual Base/desktop sync code against an isolated backend. Dependency overrides keep packaging tools off vulnerable transitive releases and are covered by the Windows EXE/MSI package build.
+The original Electron sources remain for compatibility tests and migration reference. New interface features belong in `checkys-base/web/`.

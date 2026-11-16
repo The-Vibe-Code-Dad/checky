@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const webSource = fs.readFileSync(path.join(__dirname, '../web/mobile-storage.js'), 'utf8');
 const desktopSource = fs.readFileSync(path.join(__dirname, '../../checkys-app/main.js'), 'utf8');
-const context = vm.createContext({ window: {} });
+const context = vm.createContext({ window: { checkyReminderState: require("../web/reminder-state.js") } });
 vm.runInContext(webSource.replace('window.checkyStorage = {', 'window.merge = buildSafeItemMerge; window.checkyStorage = {'), context);
 const clone = value => JSON.parse(JSON.stringify(value));
 const merge = (base, local, remote) => clone(context.window.merge(base, local, remote));

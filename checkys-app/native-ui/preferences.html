@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'">
+<title>Checky Desktop settings</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="preferences.css"></head>
+<body><main><h1>Checky Desktop</h1><form id="preferences">
+<fieldset><legend>Checklist</legend><label><input type="radio" name="mode" value="hosted" checked> My Checky server</label>
+<label for="site">Checky web address</label><input id="site" type="url" required placeholder="https://checky.example.com">
+<label><input type="radio" name="mode" value="local"> Local checklist on this computer</label></fieldset>
+<label for="shortcut">Show or hide Checky from any app</label><input id="shortcut" required maxlength="80" spellcheck="false" placeholder="Ctrl+Alt+C">
+<p class="hint">Use a modifier and a key, such as Ctrl+Alt+C. On Wayland you can also bind <code>checky-desktop --toggle</code> in your system keyboard settings.</p>
+<p id="status" role="status" class="hint"></p><button class="btn btn-primary">Save and open Checky</button>
+</form></main><script src="preferences.js"></script></body></html>

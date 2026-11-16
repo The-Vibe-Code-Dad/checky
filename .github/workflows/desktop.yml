@@ -1,0 +1,110 @@
+name: Build Checky Desktop
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'checkys-app/src-tauri/**'
+      - 'checkys-app/native-ui/**'
+      - 'checkys-app/prepare-desktop.cjs'
+      - 'checkys-app/package*.json'
+      - '.github/workflows/desktop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            bundles: nsis
+            target: x86_64-pc-windows-msvc
+          - os: macos-15
+            bundles: dmg
+            target: universal-apple-darwin
+          - os: ubuntu-24.04
+            bundles: deb,appimage
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - working-directory: checkys-app
+        run: npm ci --no-audit --no-fund
+      - working-directory: checkys-app
+        run: |
+          node prepare-desktop.cjs
+          cargo test --locked --manifest-path src-tauri/Cargo.toml
+          npm run build -- --bundles ${{ matrix.bundles }} --target ${{ matrix.target }} -- --locked
+      - name: Collect installers
+        shell: bash
+        run: |
+          node --input-type=commonjs <<'NODE'
+          const fs = require('node:fs'), path = require('node:path');
+          const version = require('./checkys-app/package.json').version;
+          const root = 'checkys-app/src-tauri/target/${{ matrix.target }}/release/bundle';
+          fs.mkdirSync('installers');
+          for (const [dir, suffix, name] of [
+            ['nsis','.exe','x64.exe'], ['dmg','.dmg','universal.dmg'],
+            ['appimage','.AppImage','x86_64.AppImage'], ['deb','.deb','amd64.deb']
+          ]) {
+            const source = path.join(root, dir);
+            if (!fs.existsSync(source)) continue;
+            const entries = fs.readdirSync(source).filter(file => file.endsWith(suffix));
+            if (entries.length !== 1) throw Error('Expected one ' + suffix + ' installer');
+            fs.copyFileSync(path.join(source, entries[0]), path.join('installers','checkys-list-' + version + '-' + name));
+          }
+          NODE
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: install-${{ runner.os }}
+          path: installers/*
+          if-no-files-found: error
+
+  release:
+    if: github.ref == 'refs/heads/main' && github.repository == 'The-Vibe-Code-Dad/checky'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: install-*
+          path: installers
+          merge-multiple: true
+      - name: Publish a complete versioned desktop release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./checkys-app/package.json').version")
+          tag="desktop-v$version"
+          for suffix in x64.exe universal.dmg x86_64.AppImage amd64.deb; do
+            test -s "installers/checkys-list-$version-$suffix"
+          done
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists. Use a new version to publish new binaries."
+            exit 0
+          fi
+          gh release create "$tag" installers/* --target "$GITHUB_SHA" --title "Checky Desktop $version" --notes "The Checky web app for Windows, macOS and Linux, with a native global shortcut, tray and reminders. Select your hosted Checky address or a local checklist on first launch."

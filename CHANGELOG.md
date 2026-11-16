@@ -404,6 +404,9 @@ base:
 - Fixed the installed web app getting stuck on Checking session or asking for a login when reopening a previously synced checklist offline. A stalled startup request now falls back to the saved checklist after four seconds.
 - Offline edits survive reopening and sync after reconnecting to the same account. A confirmed sign-out or expired session requires signing in again before reopening the saved checklist.
 
+## v0083 - 2026-11-16
+- Tasks and weekly checklists can alert again at a chosen interval until checked. Desktop browsers offer a platform installer on the first visit and keep the link in Settings.
+
 desktop:
 
 ## v0001 - 2026-04-07
@@ -551,6 +554,9 @@ desktop:
 
 ## v0041 - 2026-11-15
 - Matched weekly days to the desktop checklist layout and moved Mark done into the day’s options menu.
+
+## v0042 - 2026-11-16
+- Checky Desktop 2 uses a Rust/Tauri wrapper for the hosted web app and bundles the canonical web interface for local checklists. It includes a configurable global shortcut, tray, native reminders, and Windows, macOS and Linux builds.
 
 pocketbase:
 
@@ -707,3 +713,6 @@ pocketbase:
 
 ## v0043 - 2026-11-15
 - Applied the same checklist version, reminder delivery and shared-access fixes to standalone PocketBase. The migration repairs oversized checklist versions and removes stale assignments while preserving checklist content and current members.
+
+## v0044 - 2026-11-16
+- Deliver the latest due follow-up for an unchecked task, retain per-device retry protection, and preserve reminder intervals when older clients sync.

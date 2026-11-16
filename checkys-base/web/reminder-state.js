@@ -1,5 +1,15 @@
 // Completion of one occurrence is separate from permanently finishing an item.
 (function () {
+  function followUpMinutes(value) {
+    return Number.isSafeInteger(value) && value >= 1 && Number.isSafeInteger(value * 60000) ? value : null;
+  }
+  // Emit only the latest due slot. A device coming back online never needs a backlog.
+  function dueSlot(at, minutes, now, enabledAt) {
+    if (!Number.isFinite(at) || at > now) return NaN;
+    const interval = followUpMinutes(minutes) * 60000;
+    const slot = interval ? at + Math.floor((now - at) / interval) * interval : at;
+    return slot >= enabledAt && slot >= now - 86400000 ? slot : NaN;
+  }
   function repeating(item) {
     return Number.isFinite(Date.parse(item?.reminderAt)) && ['daily', 'weekly', 'monthly', 'yearly'].includes(item?.reminderRepeat);
   }
@@ -44,7 +54,7 @@
     } catch (_) { return false; }
   }
   function identity(item) {
-    return JSON.stringify([!!item.done, item.reminderAt, item.reminderRepeat, item.reminderTimeZone, item.reminderDays, item.reminderCheckedAt, item.reminderSkipToday === true]);
+    return JSON.stringify([!!item.done, item.reminderAt, followUpMinutes(item.reminderFollowUpMinutes), item.reminderRepeat, item.reminderTimeZone, item.reminderDays, item.reminderCheckedAt, item.reminderSkipToday === true]);
   }
   function mergeResetTimes(target, source) {
     const byId = new Map();
@@ -58,7 +68,7 @@
     }
     return changed;
   }
-  const api = { repeating, isChecked, setChecked, hasReminderLaterToday, identity, mergeResetTimes };
+  const api = { followUpMinutes, dueSlot, repeating, isChecked, setChecked, hasReminderLaterToday, identity, mergeResetTimes };
   if (typeof module !== 'undefined') module.exports = api;
   else window.checkyReminderState = api;
 })();

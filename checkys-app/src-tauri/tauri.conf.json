@@ -1,0 +1,28 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Checky's List",
+  "mainBinaryName": "checky-desktop",
+  "version": "2.0.0",
+  "identifier": "com.checkys.app",
+  "build": {
+    "beforeBuildCommand": "node prepare-desktop.cjs",
+    "beforeDevCommand": "node prepare-desktop.cjs",
+    "frontendDist": "../native-web"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": { "capabilities": [
+      { "identifier": "local-preferences", "windows": ["preferences"], "permissions": ["allow-read-preferences", "allow-save-preferences", "allow-open-workspace"] },
+      { "identifier": "local-checklist", "windows": ["local"], "permissions": ["allow-legacy-checklist", "allow-desktop-notify"] }
+    ] }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "dmg", "deb", "appimage"],
+    "icon": ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"],
+    "category": "Productivity",
+    "shortDescription": "Checky's List desktop checklist",
+    "linux": { "deb": { "section": "utils" } }
+  }
+}

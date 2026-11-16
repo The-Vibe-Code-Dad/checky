@@ -78,6 +78,10 @@ routerAdd('POST', '/api/checky-test/reminders/next', (e) => e.json(200, {results
       expected: expected ? [new Date(expected).toISOString()] : []
     });
     const calendarCases = [
+      calendarCase('none', '2030-01-01T09:00:00Z', '2030-01-03T09:17:00Z', '2030-01-03T09:15:00Z', {reminderFollowUpMinutes:15}),
+      calendarCase('none', '2030-01-01T09:00:00Z', '2030-01-03T09:17:00Z', null, {reminderFollowUpMinutes:15, done:true}),
+      calendarCase('daily', '2030-01-01T09:00:00Z', '2030-01-02T09:17:00Z', null, {reminderFollowUpMinutes:15, done:true, reminderCheckedAt:'2030-01-02T09:04:00Z'}),
+      calendarCase('daily', '2030-01-01T09:00:00Z', '2030-01-03T09:17:00Z', '2030-01-03T09:15:00Z', {reminderFollowUpMinutes:15, done:true, reminderCheckedAt:'2030-01-02T09:04:00Z'}),
       ...[0,1].map(resetDay => ({
         ...calendarCase('weekly', '2030-03-03T14:00:00Z', '2030-03-10T13:05:00Z', resetDay === 0 ? '2030-03-10T13:00:00Z' : null,
           { reminderDays:[0], done:true, reminderCheckedAt:'2030-03-09T18:00:00Z' }),
@@ -115,6 +119,10 @@ routerAdd('POST', '/api/checky-test/reminders/next', (e) => e.json(200, {results
       calendarCase('weekly', '2030-03-09T14:00:00Z', '2030-03-11T13:05:00Z', null, { reminderDays: ['1'] }),
       calendarCase('weekly', '2030-03-09T14:00:00Z', '2030-03-11T13:05:00Z', null, { reminderDays: 'Monday' })
     ];
+    for (const test of calendarCases) {
+      const slot = require('../web/weekly-checklist.js').notificationSlot(test.item, {weeklyChecklist:test.weeklyChecklist}, Date.parse(test.now), Date.parse(test.enabledAt || '2000-01-01'));
+      assert.deepEqual(Number.isFinite(slot) ? [new Date(slot).toISOString()] : [], test.expected, 'Desktop ' + JSON.stringify(test));
+    }
     const calendar = await req('/api/checky-test/reminders/calendar', 'POST', { cases: calendarCases }, ah);
     assert.equal(calendar.status, 200, JSON.stringify(calendar.data));
     calendarCases.forEach((test, i) => assert.deepEqual(calendar.data.results[i], test.expected, JSON.stringify(test)));

@@ -248,6 +248,7 @@ function normalizeData(data) {
       done: !!item?.done,
       completedAt: normalizeCompletedAt(item?.completedAt),
       reminderAt: normalizeCompletedAt(item?.reminderAt),
+      reminderFollowUpMinutes: window.checkyReminderState.followUpMinutes(item?.reminderFollowUpMinutes),
       reminderRepeat: ['daily', 'weekly', 'monthly', 'yearly'].includes(item?.reminderRepeat) ? item.reminderRepeat : 'none',
       reminderTimeZone: typeof item?.reminderTimeZone === 'string' ? item.reminderTimeZone.slice(0, 120) : null,
       reminderDays: Array.isArray(item?.reminderDays) ? [...new Set(item.reminderDays.filter(day => Number.isInteger(day) && day >= 0 && day <= 6))].sort() : null,
@@ -325,7 +326,7 @@ function setLoginStatus(message, isError = false) {
 }
 
 function isHostedWebRuntime() {
-  return !window.Capacitor && window.location?.protocol !== "file:";
+  return !window.checkyDesktop?.local && !window.Capacitor && window.location?.protocol !== "file:";
 }
 
 function getHostedServerUrl() {
@@ -2049,7 +2050,9 @@ async function changeItemCheck(tabId, itemId, checked) {
       refreshRepeatingCheckboxes(); return;
     }
   }
-  reminder.setChecked(findItem(), checked, now, skipToday);
+  const current = findItem();
+  reminder.setChecked(current, checked, now, skipToday);
+  if (window.checkyDesktop?.local && checked && reminder.repeating(current)) current.reminderResetAt = window.checkyWeekly.localReset(current, now);
   persistChecklistImmediately();
   refreshRepeatingCheckboxes();
 }
@@ -2298,7 +2301,7 @@ async function editItemReminder(tabId, itemId) {
   const checklistId = state.currentChecklistId;
   const item = state.data.tabs.find(tab => tab.id === tabId)?.items.find(item => item.id === itemId);
   if (!item || window.checkyReminderState.isChecked(item)) return;
-  const value = await window.checkyReminders.edit(item);
+  const value = await window.checkyReminders.edit(item, !!window.checkyDesktop);
   if (value === undefined) return;
   const current = state.data.tabs.find(tab => tab.id === tabId)?.items.find(item => item.id === itemId);
   if (checklistId !== state.currentChecklistId || !current || window.checkyReminderState.isChecked(current)) return;
@@ -2306,6 +2309,7 @@ async function editItemReminder(tabId, itemId) {
   current.reminderCheckedAt = null;
   current.reminderSkipToday = false;
   current.reminderResetAt = null;
+  current.reminderFollowUpMinutes = value?.followUpMinutes || null;
   current.reminderAt = value?.at || null;
   current.reminderRepeat = value?.repeat || 'none';
   current.reminderTimeZone = value?.timeZone || null;
@@ -2313,7 +2317,7 @@ async function editItemReminder(tabId, itemId) {
   clearPendingSave();
   const saved = await persistChecklistSnapshot(createChecklistSnapshot(), ++lastChecklistSaveRequestId);
   renderItems();
-  if (saved) await runManualSync('reminder');
+  if (saved && !window.checkyDesktop?.local) await runManualSync('reminder');
 }
 
 async function prepareForAppUpdate(showProgress) {
@@ -2782,6 +2786,9 @@ function bindEvents() {
 
 async function init() {
   bindEvents();
+  if (window.checkyDesktop?.local) {
+    for (const id of ['advancedSettingsToggle', 'syncNowBtn']) document.getElementById(id)?.closest('.setting-row')?.setAttribute('hidden', '');
+  }
   const loaded = await window.checkyStorage.loadState();
   state.data = normalizeData(loaded.checklist);
   state.settings = normalizeSettings(loaded.settings);
@@ -2808,6 +2815,7 @@ async function init() {
   }
   render();
   window.checkyHostedShellReady?.(state.hostedSession);
+  window.checkyDesktopReady?.();
   window.checkyPrepareForUpdate = prepareForAppUpdate;
   void window.checkyReminders?.init(state.hostedSession.authenticated ? state.hostedSession.user.id : "");
   void loadInstalledAddons();

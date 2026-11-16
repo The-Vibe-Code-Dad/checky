@@ -357,7 +357,7 @@ function prepareChecklist(record, previous) {
       for (const tab of before.tabs) for (const item of tab.items) {
         if (typeof item?.id === 'string' && typeof item.reminderAt === 'string' && Number.isFinite(Date.parse(item.reminderAt))) {
           reminders['item:' + item.id] = { reminderAt: item.reminderAt,
-            reminderRepeat: item.reminderRepeat || 'none', reminderTimeZone: item.reminderTimeZone || null,
+            reminderFollowUpMinutes: item.reminderFollowUpMinutes || null, reminderRepeat: item.reminderRepeat || 'none', reminderTimeZone: item.reminderTimeZone || null,
             reminderDays: item.reminderDays == null ? null : item.reminderDays,
             done: !!item.done, reminderCheckedAt: item.reminderCheckedAt || null, reminderSkipToday: item.reminderSkipToday === true };
         }
@@ -370,6 +370,10 @@ function prepareChecklist(record, previous) {
         const oldTab = oldTabs.get(tab.id);
         if (!oldTab) continue;
         if (tab.weeklyChecklist === undefined && oldTab.weeklyChecklist) { tab.weeklyChecklist = oldTab.weeklyChecklist; changed = true; }
+        if (tab.weeklyChecklist && oldTab.weeklyChecklist?.followUpMinutes && tab.weeklyChecklist.followUpMinutes === undefined) {
+          tab.weeklyChecklist.followUpMinutes = oldTab.weeklyChecklist.followUpMinutes;
+          changed = true;
+        }
         if (!oldTab.weeklyChecklist && oldTab.system !== 'done') continue;
         const oldItems = new Map(oldTab.items.filter(Boolean).map(item => [item.id, item]));
         for (const item of tab.items) {
@@ -382,7 +386,7 @@ function prepareChecklist(record, previous) {
       for (const tab of after.tabs) for (const item of tab.items) {
         if (typeof item?.id === 'string' && reminders['item:' + item.id]) {
           const old = reminders['item:' + item.id];
-          for (const field of ['reminderAt', 'reminderRepeat', 'reminderTimeZone', 'reminderDays']) {
+          for (const field of ['reminderAt', 'reminderRepeat', 'reminderTimeZone', 'reminderDays', 'reminderFollowUpMinutes']) {
             if (!Object.prototype.hasOwnProperty.call(item, field)) {
               item[field] = field !== 'reminderAt' && !item.reminderAt ? (field === 'reminderRepeat' ? 'none' : null) : old[field];
               changed = true;
