@@ -53,3 +53,15 @@ test('asset redirects stay on GitHub HTTPS hosts and downloads remain bounded', 
   }
   await assert.rejects(downloadAsset(first, 4, async () => new Response('too large')), /size limit/);
 });
+
+test('a signed manifest in the release selector bootstraps the update feed', async () => {
+  const dir = directory();
+  const fetched = [];
+  try {
+    const fetchImpl = async url => { fetched.push(url); return new Response(bytes); };
+    await downloadRelease({config:{...config,signedManifest:manifest},outputDir:dir,fetchImpl,key:publicKey});
+    assert.deepEqual(fetched,[`https://github.com/${config.repository}/releases/download/${config.tag}/${manifest.fileName}`]);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir,'latest.json'),'utf8')),manifest);
+    await assert.rejects(downloadRelease({config:{...config,signedManifest:{...manifest,version:'9.0.0'}},outputDir:dir,fetchImpl,key:publicKey}),/signature/);
+  } finally { cleanup(dir); }
+});

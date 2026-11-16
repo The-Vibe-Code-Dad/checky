@@ -405,7 +405,7 @@ base:
 - Offline edits survive reopening and sync after reconnecting to the same account. A confirmed sign-out or expired session requires signing in again before reopening the saved checklist.
 
 ## v0083 - 2026-11-16
-- Tasks and weekly checklists can alert again at a chosen interval until checked. Desktop browsers offer a platform installer on the first visit and keep the link in Settings.
+- Tasks and weekly checklists can alert again at a chosen interval until checked. Desktop browsers offer a platform installer on the first visit and keep the link in Settings. The with-app images offer the signed Windows upgrade from Electron to Checky Desktop 2.0.0.
 
 desktop:
 

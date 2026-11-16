@@ -75,6 +75,38 @@ jobs:
           docker build -t checky-web-app-baby-regression --build-arg BASE_WEB_IMAGE=checky-web-baby-regression:latest -f checkys-base/web-with-app.Dockerfile checkys-base/.desktop-release
           CHECKY_TEST_WEB_IMAGE=checky-web-app-baby-regression:latest CHECKY_TEST_POCKETBASE_IMAGE=checky-pocketbase-baby-regression:latest CHECKY_TEST_WITH_APP=true CHECKY_TEST_BABY=true node checkys-base/test/casaos-stack.cjs
 
+  attach-update-manifest:
+    name: Attach verified Windows update manifest
+    needs: validate
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.repository == 'The-Vibe-Code-Dad/checky'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs'), path = require('node:path');
+          const release = require('./checkys-base/desktop-release.json');
+          if (release.signedManifest) {
+            const {verifyManifest} = require('./checkys-base/scripts/lib/desktop-update.cjs');
+            verifyManifest(release.signedManifest, require('./checkys-base/scripts/lib/update-public-key.json').publicKey);
+            fs.writeFileSync(path.join(process.env.RUNNER_TEMP,'latest.json'), JSON.stringify(release.signedManifest,null,2)+'\n');
+          }
+          NODE
+          if [ ! -f "$RUNNER_TEMP/latest.json" ]; then exit 0; fi
+          tag=$(node -p "require('./checkys-base/desktop-release.json').tag")
+          if gh release view "$tag" --json assets --jq '.assets[].name' | grep -Fxq latest.json; then
+            gh release download "$tag" -p latest.json -O "$RUNNER_TEMP/published.json"
+            cmp "$RUNNER_TEMP/latest.json" "$RUNNER_TEMP/published.json"
+          else
+            gh release upload "$tag" "$RUNNER_TEMP/latest.json"
+          fi
+
   publish:
     name: Publish AMD64 and ARM64 images
     needs: validate
