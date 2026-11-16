@@ -2,6 +2,7 @@ fn main() {
     let manifest = tauri_build::AppManifest::new().commands(&[
         "read_preferences",
         "save_preferences",
+        "open_releases",
         "open_workspace",
         "legacy_checklist",
         "desktop_notify",

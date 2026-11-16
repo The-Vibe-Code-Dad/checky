@@ -2803,6 +2803,7 @@ async function init() {
     });
   }
   state.dataLocation = loaded.dataLocation;
+  if (loaded.migrationMessage) setStatus(loaded.migrationMessage);
   state.syncRestorePoint = normalizeSyncRestorePointInfo(loaded.syncRestorePoint);
   state.ui.loginOverlayOpen = isHostedWebRuntime()
     ? !(hasHostedLoginCredentials() || state.hostedSession.offline)
@@ -2815,7 +2816,7 @@ async function init() {
   }
   render();
   window.checkyHostedShellReady?.(state.hostedSession);
-  window.checkyDesktopReady?.();
+  window.checkyDesktopReady?.(state.hostedSession);
   window.checkyPrepareForUpdate = prepareForAppUpdate;
   void window.checkyReminders?.init(state.hostedSession.authenticated ? state.hostedSession.user.id : "");
   void loadInstalledAddons();

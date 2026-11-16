@@ -16,7 +16,7 @@ permissions:
 
 concurrency:
   group: desktop-release
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -27,7 +27,7 @@ jobs:
           - os: windows-latest
             bundles: nsis
             target: x86_64-pc-windows-msvc
-          - os: macos-15
+          - os: macos-latest
             bundles: dmg
             target: universal-apple-darwin
           - os: ubuntu-24.04

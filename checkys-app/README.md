@@ -2,7 +2,7 @@
 
 Checky Desktop 2 wraps Checky Base in a Rust/Tauri window on Windows, macOS and Linux. Choose your hosted Checky address on first launch to use the same sign-in, shared lists, add-ons, reminders and web updates as your browser. For a standalone checklist, choose **Local checklist on this computer**. That interface is built from `checkys-base/web` and opens without a server.
 
-Use **Settings → Checky Desktop** or the tray menu to change the server, switch workspaces, or change the global show/hide shortcut. Checky initially tries Ctrl+Space (Command+Space on Mac). The tray menu also works when the OS already uses the shortcut. On a Wayland desktop that reserves global hotkeys, assign `checky-desktop --toggle` to a system shortcut.
+Use **Settings → Checky Desktop** or the tray menu to change the server, switch workspaces, or change the global show/hide shortcut. Checky initially tries Ctrl+Space (Command+Space on Mac). Desktop settings also control launch at startup, always on top and hiding when the window loses focus. **Check for desktop updates** opens the published installers. The tray menu also works when the OS already uses the shortcut. On a Wayland desktop that reserves global hotkeys, assign `checky-desktop --toggle` to a system shortcut.
 
 Enable **Settings → Event reminders → Notification settings** in the wrapper for native notifications from the open checklist, including while hidden in the tray. Set **Repeat until checked (minutes)** on a reminder or in **Edit week**. Quit exits the native reminder scheduler. Browser Web Push subscriptions remain separately configurable on each browser.
 
