@@ -70,7 +70,8 @@ jobs:
           hdiutil attach -readonly -nobrowse -mountpoint "$mount" "${image[0]}"
           trap 'hdiutil detach "$mount"' EXIT
           app=$(find "$mount" -maxdepth 1 -name '*.app' -print -quit)
-          lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/checky-desktop"
+          binary=$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$app/Contents/Info.plist")
+          lipo "$app/Contents/MacOS/$binary" -verify_arch arm64 x86_64
           codesign --verify --deep --strict "$app"
       - name: Collect installers
         shell: bash
