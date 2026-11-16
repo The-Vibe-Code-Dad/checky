@@ -1994,14 +1994,20 @@
       localStorage.setItem(OFFLINE_LOCK_KEY, "1");
     },
     async loadState() {
+      let migrationMessage = "";
       if (window.checkyDesktop?.local && !localStorage.getItem(CHECKLIST_KEY)) {
-        const old = await window.__TAURI__.core.invoke("legacy_checklist");
-        if (old) {
-          const checklist = JSON.parse(old);
-          if (Array.isArray(checklist.tabs)) writeJson(CHECKLIST_KEY, normalizeChecklistData(checklist));
+        try {
+          const old = await window.__TAURI__.core.invoke("legacy_checklist");
+          if (old) {
+            const checklist = JSON.parse(old);
+            if (!Array.isArray(checklist?.tabs)) throw new Error("Invalid checklist");
+            writeJson(CHECKLIST_KEY, normalizeChecklistData(checklist));
+          }
+        } catch (_) {
+          migrationMessage = "The previous desktop checklist could not be imported. Use Import JSON in Settings to choose a backup.";
         }
       }
-      return await syncContextApi.loadLocalState();
+      return { ...(await syncContextApi.loadLocalState()), migrationMessage };
     },
     async signInHostedSession(email, password) {
       const { settings, credentials } = await syncContextApi.load();

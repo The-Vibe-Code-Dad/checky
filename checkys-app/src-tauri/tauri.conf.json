@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [],
     "security": { "capabilities": [
-      { "identifier": "local-preferences", "windows": ["preferences"], "permissions": ["allow-read-preferences", "allow-save-preferences", "allow-open-workspace"] },
+      { "identifier": "local-preferences", "windows": ["preferences"], "permissions": ["allow-read-preferences", "allow-open-releases", "allow-save-preferences", "allow-open-workspace"] },
       { "identifier": "local-checklist", "windows": ["local"], "permissions": ["allow-legacy-checklist", "allow-desktop-notify"] }
     ] }
   },

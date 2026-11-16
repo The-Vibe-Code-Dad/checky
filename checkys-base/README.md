@@ -4,6 +4,13 @@
 
 The goal of this package is to deploy the public-facing web app and PocketBase together as one installable unit so the hosted app can run from a single domain and route `/api` requests to PocketBase.
 
+## Desktop installs and reminders
+
+After sign-in, a desktop browser offers Checky Desktop once. The installer stays under **Settings → Checky Desktop**. Windows gets an x64 installer, macOS a universal disk image, and Linux an x86-64 AppImage. A Debian package is also available on the desktop release page. Select this server’s web address in the wrapper to use its checklists and installed add-ons. The local workspace opens without a server.
+
+Use **Remind** on a task or **Edit week** on a weekly checklist to set **Repeat until checked (minutes)**. Leave it blank for one alert per occurrence. An offline check takes effect on the server when it syncs. Enable notifications separately on each device.
+
+
 ## Current Stack
 
 The hosted package currently includes:

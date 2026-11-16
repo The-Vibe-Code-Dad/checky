@@ -117,3 +117,36 @@ test('a repeating check expires for the next occurrence; Mark done and one-off c
   assert.equal(isChecked(item), true);
   setChecked(item, false); assert.equal(isChecked(item), false);
 });
+
+test('desktop installer appears on first signed-in desktop visit and stays in Settings', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../web/desktop.js'), 'utf8');
+  for (const [userAgent, maxTouchPoints, suffix] of [
+    ['Windows NT',0,'.exe'], ['Macintosh',0,'.dmg'], ['X11 Linux x86_64',0,'.AppImage'],
+    ['Android Linux',5,null], ['Macintosh',5,null], ['iPhone',5,null]
+  ]) {
+    const storage = new Map();
+    function open() {
+      const elements = new Map(), window = {};
+      const getElementById = id => {
+        if (!elements.has(id)) elements.set(id, {hidden:true});
+        return elements.get(id);
+      };
+      vm.runInNewContext(source, { window, navigator:{userAgent,maxTouchPoints}, document:{getElementById},
+        localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)} });
+      return {ready:window.checkyDesktopReady, element:getElementById};
+    }
+    let page=open();
+    page.ready({authenticated:false});
+    assert.equal(page.element('desktopInstallOffer').hidden,true);
+    page=open(); page.ready({authenticated:true});
+    assert.equal(page.element('desktopInstallOffer').hidden,!suffix);
+    if (!suffix) continue;
+    assert.ok(page.element('desktopDownload').href.endsWith(suffix));
+    page.element('desktopInstallLater').onclick();
+    assert.equal(page.element('desktopInstallOffer').hidden,true);
+    page=open(); page.ready({authenticated:true});
+    assert.equal(page.element('desktopInstallOffer').hidden,true);
+    assert.equal(page.element('desktopSettingsRow').hidden,false);
+    assert.ok(page.element('desktopDownload').href.endsWith(suffix));
+  }
+});

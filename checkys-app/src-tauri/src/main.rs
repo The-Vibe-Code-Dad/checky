@@ -15,14 +15,18 @@ use tauri::{
     tray::TrayIconBuilder,
     AppHandle, Manager, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
+use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tauri_plugin_notification::NotificationExt;
 
 #[derive(Clone, Deserialize, Serialize)]
+#[serde(default)]
 struct Preferences {
     site: String,
     shortcut: String,
     local: bool,
+    always_on_top: bool,
+    hide_on_blur: bool,
 }
 
 impl Default for Preferences {
@@ -31,6 +35,8 @@ impl Default for Preferences {
             site: "https://example.domain".into(),
             shortcut: "CmdOrCtrl+Space".into(),
             local: false,
+            always_on_top: true,
+            hide_on_blur: false,
         }
     }
 }
@@ -39,6 +45,7 @@ impl Default for Preferences {
 struct DesktopState {
     settings: Preferences,
     registered: bool,
+    startup: bool,
 }
 
 struct Desktop {
@@ -107,7 +114,8 @@ fn preferences(app: &AppHandle) -> Result<()> {
         WebviewUrl::App("preferences.html".into()),
     )
     .title("Checky Desktop settings")
-    .inner_size(470., 500.)
+    .always_on_top(true)
+    .inner_size(475., 665.)
     .on_navigation(app_url)
     .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
     .build()
@@ -121,10 +129,11 @@ fn read_preferences(app: AppHandle) -> Result<DesktopState> {
     Ok(DesktopState {
         settings: state.settings.clone(),
         registered: state.registered,
+        startup: app.autolaunch().is_enabled().unwrap_or(false),
     })
 }
 #[tauri::command]
-async fn save_preferences(app: AppHandle, mut settings: Preferences) -> Result<()> {
+async fn save_preferences(app: AppHandle, mut settings: Preferences, startup: bool) -> Result<()> {
     settings.site = site_url(&settings.site)?.origin().ascii_serialization();
     if settings.shortcut.len() > 80 {
         return Err("Shortcut is too long.".into());
@@ -135,6 +144,7 @@ async fn save_preferences(app: AppHandle, mut settings: Preferences) -> Result<(
     }
     let desktop = app.state::<Desktop>();
     let mut state = desktop.state.lock().map_err(error)?;
+    let old_startup = app.autolaunch().is_enabled().map_err(error)?;
     let old = state.settings.shortcut.parse::<Shortcut>().ok();
     let change = !state.registered || Some(key) != old;
     // If the OS cannot register any key, the current preference still opens Checky from the tray.
@@ -151,13 +161,28 @@ async fn save_preferences(app: AppHandle, mut settings: Preferences) -> Result<(
     } else {
         true
     };
+    let set_startup = |enable| {
+        if enable {
+            app.autolaunch().enable()
+        } else {
+            app.autolaunch().disable()
+        }
+    };
     let write = || -> Result<()> {
         let dir = app.path().app_config_dir().map_err(error)?;
         fs::create_dir_all(&dir).map_err(error)?;
         let mut file = tempfile::NamedTempFile::new_in(&dir).map_err(error)?;
         serde_json::to_writer(&mut file, &settings).map_err(error)?;
         file.flush().map_err(error)?;
-        file.persist(dir.join("desktop.json")).map_err(error)?;
+        if startup != old_startup {
+            set_startup(startup).map_err(error)?;
+        }
+        if let Err(e) = file.persist(dir.join("desktop.json")) {
+            if startup != old_startup {
+                let _ = set_startup(old_startup);
+            }
+            return Err(error(e));
+        }
         Ok(())
     };
     if let Err(e) = write() {
@@ -174,6 +199,7 @@ async fn save_preferences(app: AppHandle, mut settings: Preferences) -> Result<(
     *state = DesktopState {
         settings,
         registered,
+        startup,
     };
     Ok(())
 }
@@ -190,6 +216,8 @@ fn workspace(app: &AppHandle) -> Result<()> {
     };
     let previous = active(app);
     if let Some(win) = app.get_webview_window(&label) {
+        win.set_always_on_top(settings.always_on_top)
+            .map_err(error)?;
         show(&win);
     } else {
         let local = settings.local;
@@ -219,6 +247,7 @@ fn workspace(app: &AppHandle) -> Result<()> {
         let init = format!("if (window === window.top && ({guard})) {{ window.checkyDesktop = Object.freeze({{local:{local}, preferences:()=>location.assign('https://checky-desktop.invalid/preferences'), notify:body=>window.__TAURI__.core.invoke('desktop_notify',{{body}})}}); }}");
         WebviewWindowBuilder::new(app, &label, url)
             .title("Checky's List")
+            .always_on_top(settings.always_on_top)
             .inner_size(550., 740.)
             .initialization_script(init)
             .disable_drag_drop_handler()
@@ -243,7 +272,7 @@ fn workspace(app: &AppHandle) -> Result<()> {
     *app.state::<Desktop>().active.lock().map_err(error)? = label.clone();
     if let Some(win) = previous {
         if win.label() != label {
-            let _ = win.destroy();
+            let _ = win.hide();
         }
     }
     if let Some(win) = app.get_webview_window("preferences") {
@@ -274,16 +303,68 @@ fn desktop_notify(app: AppHandle, window: WebviewWindow, body: String) -> Result
 
 #[tauri::command]
 fn legacy_checklist(app: AppHandle) -> Result<Option<String>> {
-    let config = app.path().config_dir().map_err(error)?;
-    for folder in ["Checky's List", "checkys-app"] {
-        let path = config.join(folder).join("data").join("checkTabs.json");
-        if let Ok(meta) = fs::metadata(&path) {
-            if meta.is_file() && meta.len() <= 64 * 1024 * 1024 {
-                return fs::read_to_string(path).map(Some).map_err(error);
-            }
+    let Some(dir) = legacy_directory(&app) else {
+        return Ok(None);
+    };
+    let path = dir.join("checkTabs.json");
+    fs::read_to_string(path).map(Some).map_err(error)
+}
+
+fn legacy_directory(app: &AppHandle) -> Option<std::path::PathBuf> {
+    let config = app.path().config_dir().ok()?;
+    ["Checky's List", "checkys-app"]
+        .iter()
+        .map(|folder| config.join(folder).join("data"))
+        .find(|dir| {
+            fs::metadata(dir.join("checkTabs.json"))
+                .is_ok_and(|meta| meta.is_file() && meta.len() <= 64 * 1024 * 1024)
+        })
+}
+
+// Carry device preferences forward without importing account credentials.
+fn first_preferences(app: &AppHandle) -> Preferences {
+    let mut settings = Preferences::default();
+    let Some(dir) = legacy_directory(app) else {
+        return settings;
+    };
+    settings.local = true;
+    let Some(old) = fs::read(dir.join("settings.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+    else {
+        return settings;
+    };
+    if let Some(site) = old
+        .pointer("/advanced/serverUrl")
+        .and_then(|v| v.as_str())
+        .and_then(|s| site_url(s).ok())
+    {
+        settings.site = site.origin().ascii_serialization();
+        settings.local = false;
+    }
+    if let Some(key) = old["hotkey"].as_str() {
+        let value = key.replace("CommandOrControl", "CmdOrCtrl");
+        if value.len() <= 80
+            && value
+                .parse::<Shortcut>()
+                .is_ok_and(|key| !key.mods.is_empty())
+        {
+            settings.shortcut = value;
         }
     }
-    Ok(None)
+    settings.always_on_top = old["alwaysOnTop"]
+        .as_bool()
+        .unwrap_or(settings.always_on_top);
+    settings.hide_on_blur = old["autoHideOnBlur"]
+        .as_bool()
+        .unwrap_or(settings.hide_on_blur);
+    settings
+}
+
+#[tauri::command]
+fn open_releases() -> Result<()> {
+    open::that_detached("https://github.com/The-Vibe-Code-Dad/checky/releases/latest")
+        .map_err(error)
 }
 fn main() {
     tauri::Builder::default()
@@ -297,6 +378,7 @@ fn main() {
             }
         }))
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _, event| {
@@ -310,6 +392,7 @@ fn main() {
             read_preferences,
             save_preferences,
             open_workspace,
+            open_releases,
             desktop_notify,
             legacy_checklist
         ])
@@ -319,7 +402,7 @@ fn main() {
                 .ok()
                 .and_then(|bytes| serde_json::from_slice::<Preferences>(&bytes).ok());
             let first = saved.is_none();
-            let settings = saved.unwrap_or_default();
+            let settings = saved.unwrap_or_else(|| first_preferences(app.handle()));
             let registered = app
                 .global_shortcut()
                 .register(settings.shortcut.as_str())
@@ -328,6 +411,7 @@ fn main() {
                 state: Mutex::new(DesktopState {
                     settings,
                     registered,
+                    startup: false,
                 }),
                 active: Mutex::new(String::new()),
             });
@@ -361,6 +445,17 @@ fn main() {
             Ok(())
         })
         .on_window_event(|win, event| {
+            if let tauri::WindowEvent::Focused(false) = event {
+                if win.label() != "preferences"
+                    && win
+                        .state::<Desktop>()
+                        .state
+                        .try_lock()
+                        .is_ok_and(|s| s.settings.hide_on_blur)
+                {
+                    let _ = win.hide();
+                }
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let _ = win.hide();

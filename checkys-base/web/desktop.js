@@ -9,7 +9,7 @@
   const installers = { windows: 'checkys-list-2.0.0-x64.exe', macos: 'checkys-list-2.0.0-universal.dmg', linux: 'checkys-list-2.0.0-x86_64.AppImage' };
   const offerKey = 'checky.desktop.install-offered.v1';
 
-  window.checkyDesktopReady = () => {
+  window.checkyDesktopReady = session => {
     if (!platform && !native) return;
     byId('desktopSettingsRow').hidden = false;
     if (native) {
@@ -26,7 +26,7 @@
     }
     byId('desktopInstallLater').onclick = () => { offer.hidden = true; };
     try {
-      if (!localStorage.getItem(offerKey)) {
+      if ((session?.authenticated || session?.offline) && !localStorage.getItem(offerKey)) {
         localStorage.setItem(offerKey, '1');
         offer.hidden = false;
       }
@@ -72,6 +72,7 @@
       for (const tab of state.data.tabs) {
         if (tab.system === 'done') continue;
         for (const item of tab.items) {
+          if (!item.reminderAt) continue;
           const slot = window.checkyWeekly.notificationSlot(item, tab, now, enabledAt);
           const id = JSON.stringify([tab.id, item.id]);
           if (Number.isFinite(slot) && slot > (delivered[id] || 0)) {

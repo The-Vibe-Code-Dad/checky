@@ -214,7 +214,7 @@ routerAdd('POST', '/api/checky-test/reminders/next', (e) => e.json(200, {results
     const update = (user, items, version = 2) => req('/api/collections/checklists/records/' + user.defaultChecklist, 'PATCH', { data: data(items), version }, ah);
     const recurringAnchor = new Date(Date.parse(dueAt) - 86400000 * 5).toISOString();
     const checkedAt = new Date(Date.parse(dueAt) - 86400000 + 10000).toISOString();
-    const savedRepeat = await update(alice, [{ id: 'due', done:true, reminderCheckedAt:checkedAt, reminderResetAt:'2099-01-01T00:00:00Z', reminderAt: recurringAnchor, reminderRepeat: 'weekly', reminderTimeZone: 'UTC', reminderDays: [0, 1, 2, 3, 4, 5, 6] }, { id: 'done', done: true }, { id: 'future', reminderAt: new Date(Date.now() + 60000).toISOString() }]);
+    const savedRepeat = await update(alice, [{ id: 'due', done:true, reminderCheckedAt:checkedAt, reminderResetAt:'2099-01-01T00:00:00Z', reminderFollowUpMinutes:15, reminderAt: recurringAnchor, reminderRepeat: 'weekly', reminderTimeZone: 'UTC', reminderDays: [0, 1, 2, 3, 4, 5, 6] }, { id: 'done', done: true }, { id: 'future', reminderAt: new Date(Date.now() + 60000).toISOString() }]);
     assert.equal(savedRepeat.status, 200, JSON.stringify(savedRepeat.data));
     assert.equal(savedRepeat.data.data.tabs[0].items[0].reminderResetAt, dueAt, 'Server computes the reset time');
     await update(bob, [{ id: 'private-bob' }]);
@@ -233,14 +233,16 @@ routerAdd('POST', '/api/checky-test/reminders/next', (e) => e.json(200, {results
     const legacySave = await req('/api/collections/checklists/records/' + alice.defaultChecklist, 'PATCH', { data: legacy, version: 3 }, ah);
     assert.equal(legacySave.data.data.tabs[0].items[0].reminderAt, recurringAnchor);
     assert.equal(legacySave.data.data.tabs[0].items[0].reminderRepeat, 'weekly');
+    assert.equal(legacySave.data.data.tabs[0].items[0].reminderFollowUpMinutes, 15);
     assert.equal(legacySave.data.data.tabs[0].items[0].reminderTimeZone, 'UTC');
     assert.deepEqual(legacySave.data.data.tabs[0].items[0].reminderDays, [0, 1, 2, 3, 4, 5, 6]);
     assert.equal(legacySave.data.data.tabs[0].items[0].reminderCheckedAt, checkedAt);
     assert.equal(legacySave.data.data.tabs[0].items[0].reminderResetAt, dueAt);
-    const cleared = data([{ id: 'due', reminderAt: null }]);
+    const cleared = data([{ id: 'due', reminderAt: null, reminderFollowUpMinutes: null }]);
     const clearSave = await req('/api/collections/checklists/records/' + alice.defaultChecklist, 'PATCH', { data: cleared, version: 4 }, ah);
     assert.equal(clearSave.data.data.tabs[0].items[0].reminderAt, null);
     assert.equal(clearSave.data.data.tabs[0].items[0].reminderDays, null);
+    assert.equal(clearSave.data.data.tabs[0].items[0].reminderFollowUpMinutes, null);
     console.log('PASS older clients retain omitted reminder dates; explicit null removes them');
     const shared = await req('/api/collections/shared_checklists/records', 'POST', { owner: bob.id, sharedWith: [alice.id], shareKey: 'reminder-shared', name: 'Shared', data: data([{ id: 'shared' }]), version: 1 }, ah);
     assert.equal(shared.status, 200, JSON.stringify(shared.data));
