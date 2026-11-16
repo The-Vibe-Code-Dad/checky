@@ -17,6 +17,7 @@
   const MAX_ITEMS_PER_TAB = 1000;
   const MAX_TAB_NAME_LENGTH = 120;
   const MAX_ITEM_TEXT_LENGTH = 20000;
+  const OFFLINE_LOCK_KEY = "checky.base.offlineLocked";
   const HOSTED_SESSION_PATH = "/api/checkys-base/session";
 
   function isHostedWebRuntime() {
@@ -44,6 +45,7 @@
   };
 
   let remotePushTimer = null;
+  let offlineView = false;
   let queuedRemoteChecklist = null;
   let remotePushPromise = Promise.resolve();
 
@@ -479,39 +481,27 @@
   }
 
   async function getLocalState() {
-    let { settings, credentials } = await loadSyncContext();
+    let settings = await loadSettings();
     let hostedSession = null;
 
     if (isHostedWebRuntime()) {
-      try {
-        hostedSession = await authApi.readHostedSession(credentials);
-        const hostedEmail = hostedSession?.user?.email;
-        if (typeof hostedEmail === "string" && hostedEmail && hostedEmail !== normalizeSettings(settings).advanced.email) {
-          settings = normalizeSettings({
-            ...settings,
-            advanced: {
-              ...normalizeSettings(settings).advanced,
-              email: hostedEmail,
-              password: ""
-            }
-          });
-          writeJson(SETTINGS_KEY, getPersistedSettings(settings));
-          credentials = {
-            ...credentials,
-            email: hostedEmail
-          };
-        }
-      } catch {
-        hostedSession = {
-          authenticated: false,
-          setupRequired: false,
-          user: null
-        };
+      hostedSession = await getHostedViewSession();
+      const previousUser = readSyncMeta().userId;
+      if (hostedSession.authenticated && previousUser && previousUser !== hostedSession.user.id) {
+        clearSyncMeta();
+        localStorage.removeItem(CHECKLIST_KEY);
+        localStorage.removeItem(SYNC_RESTORE_POINT_KEY);
+      }
+      const hostedEmail = hostedSession.user?.email;
+      if (hostedSession.authenticated && hostedEmail && hostedEmail !== settings.advanced.email) {
+        settings = normalizeSettings({ ...settings, advanced: { ...settings.advanced, email: hostedEmail, password: "" } });
+        writeJson(SETTINGS_KEY, getPersistedSettings(settings));
       }
     }
 
     return {
-      checklist: getCachedChecklist(),
+      checklist: !hostedSession || (hostedSession.user?.id && readSyncMeta().userId === hostedSession.user.id)
+        ? getCachedChecklist() : cloneValue(DEFAULT_CHECKLIST),
       settings,
       dataLocation: getDataLocationDescription(settings),
       syncRestorePoint: getSyncRestorePointInfo(),
@@ -660,7 +650,7 @@
     return `${fallback || "PocketBase request failed."} Could not reach PocketBase${target}. Check that the server URL is correct, the LAN IP is current, the server is running, and this device can reach the port on the same network.`;
   }
 
-  async function rawJsonRequest({ credentials, path, query, method = "GET", token = "", body, errorMessage }) {
+  async function rawJsonRequest({ credentials, path, query, method = "GET", token = "", body, errorMessage, signal }) {
     const headers = {
       Accept: "application/json"
     };
@@ -679,6 +669,8 @@
       response = await fetch(requestUrl, {
         method,
         headers,
+        signal,
+        cache: path === HOSTED_SESSION_PATH ? "no-store" : undefined,
         body: body === undefined ? undefined : JSON.stringify(body),
         credentials: isHostedWebRuntime() ? "same-origin" : "omit"
       });
@@ -726,16 +718,21 @@
     return { token, userId };
   }
 
-  async function readHostedSession(credentials) {
+  async function readHostedSession(credentials, signal) {
     const result = await rawJsonRequest({
       credentials,
       path: HOSTED_SESSION_PATH,
+      signal,
       method: "GET",
       errorMessage: "Could not load the hosted session."
     });
 
+    if (typeof result?.authenticated !== "boolean" || (result.authenticated && !result.user?.id)) {
+      throw new Error("The server did not return a hosted session.");
+    }
+    if (!result.authenticated) localStorage.setItem(OFFLINE_LOCK_KEY, "1");
     return {
-      authenticated: !!result?.authenticated,
+      authenticated: result.authenticated,
       setupRequired: !!result?.setupRequired,
       user: result?.user && typeof result.user === "object"
         ? {
@@ -744,6 +741,35 @@
         }
         : null
       };
+  }
+
+  async function getHostedViewSession() {
+    let session;
+    if (globalThis.navigator?.onLine !== false) {
+      const controller = globalThis.AbortController && new AbortController();
+      const timeout = controller && setTimeout(() => controller.abort(), 4000);
+      try {
+        session = await readHostedSession({ serverUrl: getHostedServerUrl() }, controller?.signal);
+      } catch (error) {
+        if (error.status === 401 || error.status === 403) session = { authenticated: false };
+      } finally {
+        if (controller) clearTimeout(timeout);
+      }
+    }
+    offlineView = !session;
+    if (session) {
+      if (session.authenticated) localStorage.removeItem(OFFLINE_LOCK_KEY);
+      else localStorage.setItem(OFFLINE_LOCK_KEY, "1");
+      return session;
+    }
+
+    // Existing installs already store the account and record ID with each synced checklist.
+    const meta = readSyncMeta();
+    const saved = readJson(CHECKLIST_KEY, null);
+    if (!localStorage.getItem(OFFLINE_LOCK_KEY) && meta.userId && meta.recordId && Array.isArray(saved?.tabs)) {
+      return { authenticated: false, unavailable: true, offline: true, recordId: meta.recordId, user: { id: meta.userId } };
+    }
+    return { authenticated: false, unavailable: true };
   }
 
   async function authenticateHostedSession(credentials, email, password) {
@@ -778,7 +804,6 @@
       throw new Error("Sign-in succeeded, but the hosted session could not be confirmed.");
     }
 
-    writeSyncMeta({ userId: session.user.id });
     return session;
   }
 
@@ -790,7 +815,10 @@
         : "Sign in to hosted Checky's List first.");
     }
 
-    writeSyncMeta({ userId: session.user.id });
+    const meta = readSyncMeta();
+    if (meta.recordId && meta.userId && meta.userId !== session.user.id) {
+      throw new Error("The signed-in account changed. Reopen Checky to load its checklist.");
+    }
     return {
       token: "",
       userId: session.user.id
@@ -1822,6 +1850,7 @@
   }
 
   function queueRemotePush(checklist) {
+    if (offlineView || globalThis.navigator?.onLine === false) return;
     queuedRemoteChecklist = cloneValue(normalizeChecklistData(checklist));
     clearTimeout(remotePushTimer);
     remotePushTimer = setTimeout(() => {
@@ -1959,6 +1988,10 @@
   }
 
   window.checkyStorage = {
+    getHostedViewSession,
+    lockHostedCache() {
+      localStorage.setItem(OFFLINE_LOCK_KEY, "1");
+    },
     async loadState() {
       return await syncContextApi.loadLocalState();
     },

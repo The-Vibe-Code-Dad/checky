@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   // Legacy key names are intentionally retained so existing hosted browser data is not lost.
   const SETTINGS_KEY = "checky.android.settings";
   const SYNC_PASSWORD_FALLBACK_KEY = "checky.android.syncPassword";
@@ -103,21 +103,6 @@
     return { response, payload };
   }
 
-  async function getJson(path) {
-    const response = await fetch(new URL(path, `${getHostedServerUrl()}/`).toString(), {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        "Cache-Control": "no-store"
-      },
-      cache: "no-store",
-      credentials: "same-origin"
-    });
-
-    const payload = await readResponsePayload(response);
-    return { response, payload };
-  }
-
   function persistHostedCredentials(email) {
     const current = readJson(SETTINGS_KEY, {});
     writeJson(SETTINGS_KEY, {
@@ -144,7 +129,8 @@
 
     localStorage.removeItem(SYNC_PASSWORD_FALLBACK_KEY);
     localStorage.removeItem(SYNC_TOKEN_FALLBACK_KEY);
-    localStorage.removeItem(SYNC_META_KEY);
+    // Retain pending edits and their owner for a later sign-in to the same account.
+    window.checkyStorage.lockHostedCache();
 
     const current = readJson(SETTINGS_KEY, {});
     const advanced = current && typeof current.advanced === "object" ? current.advanced : {};
@@ -426,43 +412,10 @@
     return createResult.payload;
   }
 
-  async function loadHostedSessionSnapshot() {
-    const result = await getJson("/api/checkys-base/session");
-    const payload = result.payload && typeof result.payload === "object" ? result.payload : null;
-
-    if (payload && typeof payload.setupRequired === "boolean") {
-      hostedSetupRequired = payload.setupRequired;
-      hostedSetupResolved = true;
-    } else {
-      hostedSetupRequired = false;
-      hostedSetupResolved = false;
-    }
-
-    return {
-      response: result.response,
-      payload,
-      authenticated: !!(result.response.ok && payload?.authenticated === true && payload?.user?.id)
-    };
-  }
-
   async function refreshHostedSetupState() {
-    try {
-      const result = await loadHostedSessionSnapshot();
-      return result.payload?.setupRequired === true;
-    } catch {}
-
-    hostedSetupRequired = false;
-    hostedSetupResolved = false;
-    return hostedSetupRequired;
-  }
-
-  async function confirmHostedSession() {
-    const result = await loadHostedSessionSnapshot();
-    if (!result.authenticated) {
-      throw new Error("Sign-in succeeded, but the hosted session could not be confirmed.");
-    }
-
-    return result.payload || null;
+    const session = await window.checkyStorage.getHostedViewSession();
+    hostedSetupRequired = session.setupRequired === true;
+    hostedSetupResolved = !session.unavailable;
   }
 
   async function submitHostedSignIn(event) {
@@ -484,7 +437,6 @@
     const setupMode = hostedSetupResolved && hostedSetupRequired;
     setBusy(true, setupMode ? "Creating user..." : "Signing in...");
     setStatus(setupMode ? "Creating the first user..." : "Signing you in...", false);
-    persistHostedCredentials(email);
     clearHostedAuth();
 
     try {
@@ -493,7 +445,9 @@
       } else {
         await signIn(email, password);
       }
-      await confirmHostedSession();
+      const session = await window.checkyStorage.getHostedViewSession();
+      if (!session.authenticated) throw new Error("Sign-in succeeded, but the hosted session could not be confirmed.");
+      persistHostedCredentials(email);
       setStatus("Opening Checky's List...", false);
       window.location.reload();
     } catch (error) {
@@ -602,39 +556,26 @@
     });
   });
 
-  let initialHostedSessionAuthenticated = false;
-  loadHostedSessionSnapshot()
-    .then((result) => {
-      initialHostedSessionAuthenticated = result.authenticated;
-    })
-    .catch(() => {
-      hostedSetupRequired = false;
-      hostedSetupResolved = false;
-      initialHostedSessionAuthenticated = false;
-    })
-    .finally(() => {
-      applyHostedLoginUi();
-      bindHostedLoginHandlers();
-      ensurePocketBaseAdminButton();
-      ensureHostedSettingsUi();
-      ensureHostedLogoutButton();
-      bindHostedLogoutButton();
-      bindPocketBaseAdminButton();
+  // The renderer and login overlay use the same session decision and cached data.
+  window.checkyHostedShellReady = (session) => {
+    hostedSetupResolved = !session.unavailable;
+    hostedSetupRequired = session.setupRequired;
+    applyHostedLoginUi();
+    bindHostedLoginHandlers();
+    ensurePocketBaseAdminButton();
+    ensureHostedSettingsUi();
+    ensureHostedLogoutButton();
+    bindHostedLogoutButton();
+    bindPocketBaseAdminButton();
+    if (session.authenticated || session.offline) {
+      closeHostedLoginOverlay();
+    } else {
+      openHostedLoginOverlay();
+    }
 
-      if (initialHostedSessionAuthenticated) {
-        closeHostedLoginOverlay();
-      } else {
-        openHostedLoginOverlay();
-      }
-
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-        characterData: true
-      });
-
-      markHostedShellReady();
-    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    markHostedShellReady();
+  };
 })();
 
 

@@ -14,6 +14,7 @@ async function main() {
   if (!process.env.CHECKY_POCKETBASE_BINARY) throw Error('Set CHECKY_POCKETBASE_BINARY to a disposable test binary.');
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'checky-pwa-'));
   let child, browser, server, log = '', activeBuild = 0, failAsset = false, staleNavigation = false;
+  let stallSession = false;
   const builds = [], versions = [];
   try {
     for (let i = 0; i < 3; i++) {
@@ -41,6 +42,7 @@ async function main() {
       body: JSON.stringify({ email: 'admin@pwa.invalid', password, passwordConfirm: password }) });
     assert.equal(setup.status, 200, await setup.text());
     server = http.createServer(async (req, res) => {
+      if (stallSession && req.url === '/api/checkys-base/session') return;
       if (req.url.startsWith('/api/')) {
         const upstream = http.request(new URL(req.url, backend), { method: req.method, headers: req.headers }, response => { res.writeHead(response.statusCode, response.headers); response.pipe(res); });
         upstream.on('error', () => { res.writeHead(502); res.end(); }); req.pipe(upstream); return;
@@ -221,7 +223,28 @@ async function main() {
     await page.evaluate(() => document.getElementById('appUpdateCheck').click());
     await page.waitForFunction(() => /offline|connection|connected/.test(document.getElementById('appUpdateStatus').textContent));
     assert.equal(await page.evaluate(() => localStorage.getItem('checky-test-preference')), 'keep');
-    console.log('PASS failed shell download leaves the previous complete offline build usable; offline check gives feedback');
+    await page.locator('#loginOverlay').waitFor({state:'hidden', timeout:6500});
+    assert.equal(await page.locator('#list textarea').inputValue(), 'Last edit before updating');
+    await page.locator('#list textarea').fill('Edit saved offline');
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('checky.android.checklist')).tabs[0].items[0].text === 'Edit saved offline');
+    await page.reload();
+    await page.locator('#loginOverlay').waitFor({state:'hidden', timeout:6500});
+    assert.equal(await page.locator('#list textarea').inputValue(), 'Edit saved offline');
+    stallSession = true;
+    await context.setOffline(false);
+    await page.reload({waitUntil:'domcontentloaded'});
+    await page.locator('#loginOverlay').waitFor({state:'hidden', timeout:6500});
+    assert.equal(await page.evaluate(() => navigator.onLine && state.hostedSession.offline), true);
+    assert.equal(await page.locator('#list textarea').inputValue(), 'Edit saved offline');
+    stallSession = false;
+    await page.waitForFunction(() => state.hostedSession.authenticated && !state.hostedSession.offline && !!state.ui.lastSyncedAt);
+    const syncedText = await page.evaluate(async () => {
+      const [collection, id] = state.currentChecklistId.split(':');
+      return (await (await fetch('/api/collections/' + collection + '/records/' + id)).json()).data.tabs[0].items[0].text;
+    });
+    assert.equal(syncedText, 'Edit saved offline');
+    console.log('PASS cached checklist opens and edits survive offline reload, a stalled session check and reconnect');
+
     // Return online on the existing build, then recover the failed deployment.
     activeBuild = 1; failAsset = false; await context.setOffline(false); await page.goto(origin);
     await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
@@ -249,6 +272,59 @@ async function main() {
     assert.deepEqual(errors, []);
     console.log('PASS one tap during a real sync applies the downloaded update, including recovery after a failed deployment');
     await checkDoneArchive(page, browser, origin, password);
+    // A definite sign-out must continue to gate any remaining local data offline.
+    await context.setOffline(true);
+    await page.reload();
+    await page.locator('#loginOverlay').waitFor({state:'hidden'});
+    const draft = 'Draft before session expiry';
+    await page.locator('#list textarea').first().fill(draft);
+    await page.waitForFunction(text => JSON.parse(localStorage.getItem('checky.android.checklist')).tabs.some(tab => tab.items.some(item => item.text === text)), draft);
+    await context.clearCookies();
+    await context.setOffline(false);
+    await page.locator('#loginEmailInput').waitFor({state:'visible'});
+    await context.setOffline(true);
+    await page.reload();
+    await page.locator('#loginEmailInput').waitFor({state:'visible'});
+    assert.equal(await page.locator('#list textarea').isVisible(), false);
+    await context.setOffline(false);
+    await page.waitForFunction(() => document.querySelector('.login-card')?.dataset.mode === 'signin' && !state.hostedSession.unavailable);
+    await page.locator('#loginEmailInput').fill('admin@pwa.invalid');
+    await page.locator('#loginPasswordInput').fill(password);
+    await page.locator('#loginSubmitBtn').click();
+    await page.waitForFunction(() => typeof state !== 'undefined' && !!state.ui.lastSyncedAt && !state.ui.syncInProgress);
+    assert.equal(await page.locator('#list textarea').first().inputValue(), draft);
+    await page.evaluate(() => document.getElementById('checkysBaseHostedLogoutBtn').click());
+    await page.locator('#loginEmailInput').waitFor({state:'visible'});
+    await context.setOffline(true);
+    await page.reload();
+    await page.locator('#loginEmailInput').waitFor({state:'visible'});
+    assert.equal(await page.locator('#list textarea').isVisible(), false);
+    const adminLogin = await fetch(backend + '/api/collections/_superusers/auth-with-password', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({identity:'admin@pwa.invalid', password})
+    });
+    const newEmail = 'second@pwa.invalid';
+    const created = await fetch(backend + '/api/collections/users/records', {
+      method:'POST', headers:{'Content-Type':'application/json', Authorization:(await adminLogin.json()).token},
+      body:JSON.stringify({email:newEmail, password, passwordConfirm:password})
+    });
+    assert.equal(created.status, 200);
+    const secondId = (await created.json()).id;
+    await context.setOffline(false);
+    await page.waitForFunction(() => typeof state !== 'undefined' && !state.hostedSession.unavailable && state.ui.loginOverlayOpen);
+    await page.locator('#loginEmailInput').fill(newEmail);
+    await page.locator('#loginPasswordInput').fill(password);
+    await page.locator('#loginSubmitBtn').click();
+    await page.waitForFunction(id => typeof state !== 'undefined' && state.hostedSession.user.id === id && !!state.ui.lastSyncedAt, secondId);
+    await context.setOffline(true);
+    await page.reload();
+    await page.waitForFunction(id => typeof state !== 'undefined' && state.hostedSession.offline && state.hostedSession.user.id === id, secondId);
+    assert.equal(await page.locator('#list textarea').count(), 0, 'Second account must open only its own empty checklist');
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await page.locator('#loginEmailInput').waitFor({state:'visible'});
+    assert.equal(await page.locator('#list textarea').isVisible(), false);
+    console.log('PASS offline access respects sign-out, expired sessions, account switching and first use; signing back in restores the same user’s draft');
+
     assert.deepEqual(errors, []);
   } catch (error) { console.error(log); throw error; }
   finally {
