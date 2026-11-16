@@ -742,3 +742,5 @@ hr{
 .week-menu-button { border:0; cursor:pointer; }
 .week-header span { color:#c4c7cd; }
 .week-header { margin-bottom:8px; }
+
+#desktopSettingsRow[hidden], #desktopSettingsRow [hidden], .setting-row[hidden] { display: none; }

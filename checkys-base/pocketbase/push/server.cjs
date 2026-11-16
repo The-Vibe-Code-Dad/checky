@@ -82,6 +82,8 @@ async function main() {
       if (req.url === '/validate') return reply(200, { subscription });
       try {
         await webpush.sendNotification(subscription, JSON.stringify(body.payload), {
+          // Collapse queued alerts for the same task occurrence while a phone is offline.
+          topic: /^[a-f0-9]{64}$/.test(body.payload?.tag) ? body.payload.tag.slice(0, 32) : undefined,
           vapidDetails: { subject: vapidSubject, ...keys }, TTL: 3600, urgency: 'normal', timeout: 8000
         });
         reply(200, { ok: true });

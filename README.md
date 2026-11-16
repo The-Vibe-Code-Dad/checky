@@ -1,19 +1,19 @@
 # Checky's List
 
-Checky's List is a hosted, local-first checklist app with an Electron desktop companion.
+Checky's List is a hosted, local-first checklist app with a Rust desktop app for Windows, macOS and Linux.
 
-Checky Base is the primary product and canonical web source. The Electron desktop app remains a local-first companion with optional Checky Base/PocketBase sync.
+Checky Base is the primary product and canonical web source. The Rust desktop app opens the same hosted Checky interface and also includes a standalone local checklist.
 
 ## What You Get
 
 - Canonical hosted web app and PocketBase stack in `checkys-base/`
 - Installable offline-capable PWA
-- Electron desktop companion with optional hosted sync
+- Rust desktop app with a global show/hide shortcut
 
 ## Repo Map
 
 - `checkys-base/` - canonical web source, hosted app, PocketBase backend, and Docker Compose stack
-- `checkys-app/` - Electron desktop companion
+- `checkys-app/` - Rust desktop app
 - `pocketbase/` - PocketBase Dockerfile, hooks, and migrations
 - `private-artifacts/` - private build output folder for APKs, installers, ZIPs, and other release artifacts
 

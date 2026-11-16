@@ -8,6 +8,11 @@
   let registration, registering, checking = false, applying = false, readyVersion = '', lastCheck = 0;
   let serverVersion = '';
   function message(text) { status.textContent = text; }
+  if (window.checkyDesktop?.local) {
+    message('The local checklist is included with Checky Desktop.');
+    checkButton.hidden = true;
+    return;
+  }
   if (!window.isSecureContext || !('serviceWorker' in navigator)) {
     checkButton.disabled = true;
     message('Open Checky over HTTPS to use installed-app updates.');

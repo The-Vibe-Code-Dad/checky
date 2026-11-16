@@ -79,6 +79,7 @@ async function main() {
     assert.equal(await page.locator('.reminder-button').count(), 0);
     await openReminder(true);
     await page.locator('#reminderDateTime').fill('2030-03-10T10:30');
+    await page.locator('#reminderFollowUp').fill('15');
     assert.equal(await page.locator('#reminderRepeat').inputValue(), 'none');
     assert.deepEqual(await page.locator('#reminderRepeat option').allTextContents(), ['Does not repeat', 'Every day', 'Every week', 'Every month', 'Every year']);
     await page.locator('#reminderRepeat').selectOption('weekly');
@@ -93,6 +94,7 @@ async function main() {
     const record = await api('/api/collections/checklists/records/' + user.defaultChecklist, 'GET', undefined, admin.token);
     assert.equal(record.data.tabs[0].items[0].reminderAt, '2030-03-10T14:30:00.000Z');
     assert.equal(record.data.tabs[0].items[0].reminderRepeat, 'weekly');
+    assert.equal(record.data.tabs[0].items[0].reminderFollowUpMinutes, 15);
     assert.equal(record.data.tabs[0].items[0].reminderTimeZone, 'America/New_York');
     assert.deepEqual(record.data.tabs[0].items[0].reminderDays, [1, 3, 5]);
     // Simulate an installed PWA with an older cached reminder module. New HTML
@@ -107,6 +109,7 @@ async function main() {
     await openReminder();
     assert.equal(await page.locator('#reminderDateTime').inputValue(), '2030-03-10T10:30');
     assert.equal(await page.locator('#reminderRepeat').inputValue(), 'weekly');
+    assert.equal(await page.locator('#reminderFollowUp').inputValue(), '15');
     for (const day of ['Monday', 'Wednesday', 'Friday']) assert.equal(await page.getByRole('checkbox', { name: day, exact: true }).isChecked(), true);
     assert.equal(await page.getByRole('checkbox', { name: 'Sunday', exact: true }).isChecked(), false);
     await page.locator('#reminderDateTime').fill('2020-01-01T12:00');
@@ -117,6 +120,7 @@ async function main() {
     await openReminder(true, true);
     assert.equal(await page.evaluate(() => document.activeElement.id), 'reminderDialogTitle');
     await page.locator('#reminderDateTime').fill('2030-03-10T10:30');
+    await page.locator('#reminderFollowUp').fill('15');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     if (process.env.CHECKY_SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.CHECKY_SCREENSHOT_DIR, 'reminder-phone.png') });
     await page.locator('#reminderRepeat').selectOption('monthly');

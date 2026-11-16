@@ -10,10 +10,11 @@
   let hostedSetupResolved = false;
 
   function isHostedRuntime() {
-    return !window.Capacitor && window.location?.protocol !== "file:";
+    return !window.checkyDesktop?.local && !window.Capacitor && window.location?.protocol !== "file:";
   }
 
   if (!isHostedRuntime()) {
+    document.documentElement.classList.add("checkys-base-shell-ready");
     return;
   }
 

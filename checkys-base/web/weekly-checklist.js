@@ -23,7 +23,7 @@
       const id = value.itemIds[day];
       return typeof id === 'string' && id.length <= 120 && id && value.itemIds.indexOf(id) === day ? id : null;
     });
-    return { resetDay: value.resetDay, time: value.time, timeZone: value.timeZone, days, itemIds };
+    return { resetDay: value.resetDay, time: value.time, timeZone: value.timeZone, days, itemIds, ...(value.followUpMinutes !== undefined ? { followUpMinutes: (typeof module === 'undefined' ? window.checkyReminderState : require('./reminder-state.js')).followUpMinutes(value.followUpMinutes) } : {}) };
   }
   function wallTime(at, zone) {
     const p = Object.fromEntries(calendar(zone).formatToParts(at).map(part => [part.type, part.value]));
@@ -45,15 +45,70 @@
     const [hour, minute] = time.split(':').map(Number);
     for (let day = 0; day < 8; day++) {
       const wall = localDay + day * DAY + (hour * 60 + minute) * 60000;
-      const candidates = new Set();
-      for (const probe of [wall - DAY, wall, wall + DAY]) {
-        const instant = wall - (wallTime(probe, zone) - probe);
-        if (wallTime(instant, zone) === wall) candidates.add(instant);
-      }
-      const first = Math.min(...candidates);
+      const first = realInstant(wall, zone);
       if (Number.isFinite(first) && first >= now) return new Date(first).toISOString();
     }
     throw Error('Choose another reminder time.');
+  }
+  // Resolve a recurring wall-clock time using the offsets on both sides of a DST transition.
+  function realInstant(wall, zone) {
+    const candidates = [];
+    for (const probe of [wall - DAY, wall, wall + DAY]) {
+      const instant = wall - (wallTime(probe, zone) - probe);
+      if (wallTime(instant, zone) === wall) candidates.push(instant);
+    }
+    return Math.min(...candidates);
+  }
+  function localOccurrence(item, now, next = false) {
+    const first = Date.parse(item.reminderAt), repeat = item.reminderRepeat;
+    if (!Number.isFinite(first)) return NaN;
+    if (!repeat || repeat === 'none') return first;
+    if (!['daily','weekly','monthly','yearly'].includes(repeat) || !item.reminderTimeZone || item.reminderTimeZone === 'Local') return NaN;
+    try {
+      const zone = item.reminderTimeZone, anchor = new Date(wallTime(first, zone));
+      const current = new Date(wallTime(next ? Math.max(first, now) : now, zone));
+      const clock = anchor.getTime() % DAY;
+      const day = Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), current.getUTCDate());
+      const days = item.reminderDays ?? [anchor.getUTCDay()];
+      if (repeat === 'weekly' && (!Array.isArray(days) || !days.length || days.some(d => !Number.isInteger(d) || d < 0 || d > 6))) return NaN;
+      for (let i = 0; i < (repeat === 'weekly' ? 15 : 3); i++) {
+        const offset = next ? i : -i;
+        let date;
+        if (repeat === 'monthly' || repeat === 'yearly') {
+          date = new Date(Date.UTC(current.getUTCFullYear() + (repeat === 'yearly' ? offset : 0),
+            repeat === 'monthly' ? current.getUTCMonth() + offset : anchor.getUTCMonth(), 1));
+          const last = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+          date.setUTCDate(Math.min(anchor.getUTCDate(), last));
+        } else {
+          date = new Date(day + offset * DAY);
+          if (repeat === 'weekly' && !days.includes(date.getUTCDay())) continue;
+        }
+        const wall = date.getTime() + clock;
+        const at = wall === anchor.getTime() ? first : realInstant(wall, zone) + first % 1000;
+        if (Number.isFinite(at) && at >= first && (next ? at > now : at <= now)) return at;
+      }
+    } catch (_) { /* An invalid imported timezone has no occurrences. */ }
+    return NaN;
+  }
+  function skipped(item, at) {
+    const checked = Date.parse(item.reminderCheckedAt);
+    return item.done && item.reminderSkipToday && at > checked &&
+      Math.floor(wallTime(checked, item.reminderTimeZone) / DAY) === Math.floor(wallTime(at, item.reminderTimeZone) / DAY);
+  }
+  function notificationSlot(item, tab, now, enabledAt) {
+    const at = localOccurrence(item, now);
+    if (!Number.isFinite(at) || at > now) return NaN;
+    const schedule = tab.weeklyChecklist, day = schedule?.itemIds?.indexOf(item.id) ?? -1;
+    if (day >= 0 && (!schedule.days.includes(day) || weekStart(at, schedule) !== weekStart(now, schedule) || isChecked(item, schedule, now))) return NaN;
+    const checked = Date.parse(item.reminderCheckedAt);
+    if (item.done && (!Number.isFinite(checked) || !item.reminderRepeat || item.reminderRepeat === 'none' || at <= checked || skipped(item, at))) return NaN;
+    const state = typeof module === 'undefined' ? window.checkyReminderState : require('./reminder-state.js');
+    return state.dueSlot(at, item.reminderFollowUpMinutes, now, enabledAt);
+  }
+  function localReset(item, now) {
+    let at = localOccurrence(item, now, true);
+    if (Number.isFinite(at) && skipped(item, at)) at = localOccurrence(item, at, true);
+    return Number.isFinite(at) ? new Date(at).toISOString() : null;
   }
   const order = first => names.map((_, i) => (first + i) % 7);
   function initial(tab) {
@@ -89,6 +144,7 @@
       const stamp = checked && previous?.resetDay === schedule.resetDay && Number.isFinite(Date.parse(oldStamp)) ? oldStamp : new Date(now).toISOString();
       Object.assign(item, { done: checked, completedAt: checked ? stamp : null,
         reminderCheckedAt: enabled && checked ? stamp : null, reminderResetAt: null, reminderSkipToday: false,
+        reminderFollowUpMinutes: enabled ? schedule.followUpMinutes || null : null,
         reminderAt: enabled ? (preserveAnchor ? item.reminderAt : anchor) : null,
         reminderDays: enabled ? [day] : null, reminderRepeat: enabled ? 'weekly' : 'none', reminderTimeZone: enabled ? schedule.timeZone : null });
     }
@@ -104,12 +160,15 @@
       '<fieldset><legend>Reset checklist on</legend><div class="week-choices week-start"></div></fieldset>' +
       '<fieldset><legend>Remind me on</legend><div class="week-choices week-days"></div></fieldset>' +
       '<label class="week-time">Reminder time <input type="time" required></label>' +
+      '<label class="week-follow">Repeat until checked (minutes) <input type="number" min="1" max="150119987579" step="1" inputmode="numeric" placeholder="Off"></label>' +
       '<p class="hint week-summary" aria-live="polite"></p><div class="week-actions"><button type="button" class="btn btn-ghost">Cancel</button>' +
       '<button type="submit" class="btn btn-primary">Save weekly setup</button></div></form>';
     const get = selector => dialog.querySelector(selector);
     get('.week-tab-name').textContent = tab.name;
     const time = get('input[type=time]');
     time.value = schedule.time;
+    const follow = get('.week-follow input');
+    follow.value = schedule.followUpMinutes || '';
     function choices(container, days, selected, change) {
       const buttons = new Map(days.map(day => {
         const button = document.createElement('button');
@@ -137,6 +196,7 @@
       if (dialog.contains(focused) && document.activeElement !== focused) focused.focus();
       time.disabled = !schedule.days.length;
       get('.week-time').hidden = time.disabled;
+      get('.week-follow').hidden = follow.disabled = time.disabled;
       get('.week-summary').textContent = schedule.days.length ?
         'Checkmarks clear every ' + names[schedule.resetDay] + ' at midnight (' + schedule.timeZone + ').' :
         'No reminder days selected.';
@@ -149,7 +209,7 @@
       get('.week-actions button[type=button]').onclick = () => dialog.close();
       get('form').onsubmit = event => {
         event.preventDefault();
-        result = { ...schedule, time: time.value || schedule.time };
+        result = { ...schedule, time: time.value || schedule.time, followUpMinutes: window.checkyReminderState.followUpMinutes(follow.valueAsNumber) };
         dialog.close();
       };
       dialog.showModal(); get('h2').focus();
@@ -224,7 +284,7 @@
     }
     return new Set(schedule.itemIds);
   }
-  const api = { normalize, weekStart, isChecked, nextAnchor, configure, edit, renderRows, setChecked, archiveDay, archivedThisWeek };
+  const api = { notificationSlot, localReset, normalize, weekStart, isChecked, nextAnchor, configure, edit, renderRows, setChecked, archiveDay, archivedThisWeek };
   if (typeof module !== 'undefined') module.exports = api;
   else window.checkyWeekly = api;
 })();

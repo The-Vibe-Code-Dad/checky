@@ -21,7 +21,7 @@
   const HOSTED_SESSION_PATH = "/api/checkys-base/session";
 
   function isHostedWebRuntime() {
-    return !window.Capacitor && window.location?.protocol !== "file:";
+    return !window.checkyDesktop?.local && !window.Capacitor && window.location?.protocol !== "file:";
   }
 
   function getHostedServerUrl() {
@@ -129,6 +129,7 @@
           done: !!item?.done,
           completedAt: normalizeCompletedAt(item?.completedAt),
           reminderAt: normalizeCompletedAt(item?.reminderAt),
+          reminderFollowUpMinutes: window.checkyReminderState.followUpMinutes(item?.reminderFollowUpMinutes),
           reminderRepeat: ['daily', 'weekly', 'monthly', 'yearly'].includes(item?.reminderRepeat) ? item.reminderRepeat : 'none',
           reminderTimeZone: typeof item?.reminderTimeZone === 'string' ? item.reminderTimeZone.slice(0, 120) : null,
           reminderDays: Array.isArray(item?.reminderDays) ? [...new Set(item.reminderDays.filter(day => Number.isInteger(day) && day >= 0 && day <= 6))].sort() : null,
@@ -1993,6 +1994,13 @@
       localStorage.setItem(OFFLINE_LOCK_KEY, "1");
     },
     async loadState() {
+      if (window.checkyDesktop?.local && !localStorage.getItem(CHECKLIST_KEY)) {
+        const old = await window.__TAURI__.core.invoke("legacy_checklist");
+        if (old) {
+          const checklist = JSON.parse(old);
+          if (Array.isArray(checklist.tabs)) writeJson(CHECKLIST_KEY, normalizeChecklistData(checklist));
+        }
+      }
       return await syncContextApi.loadLocalState();
     },
     async signInHostedSession(email, password) {

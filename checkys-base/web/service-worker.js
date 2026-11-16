@@ -9,10 +9,12 @@ const APP_SHELL = [
   "./auth-code-dialog.js?v=__CHECKY_BUILD__",
   "./checkys-base.js?v=__CHECKY_BUILD__",
   "./mobile-storage.js?v=__CHECKY_BUILD__",
+  "./reminder-editor.js?v=__CHECKY_BUILD__",
   "./reminder-state.js?v=__CHECKY_BUILD__",
   "./reminder-check.js?v=__CHECKY_BUILD__",
   "./weekly-checklist.js?v=__CHECKY_BUILD__",
   "./context-menu.js?v=__CHECKY_BUILD__",
+  "./desktop.js?v=__CHECKY_BUILD__",
   "./renderer.js?v=__CHECKY_BUILD__",
   "./reminders.js?v=__CHECKY_BUILD__",
   "./pwa.js?v=__CHECKY_BUILD__",
@@ -26,14 +28,20 @@ const APP_SHELL = [
 self.addEventListener('push', event => {
   let payload = {};
   try { payload = event.data?.json() || {}; } catch (_) {}
-  event.waitUntil(self.registration.showNotification("Checky's List reminder", {
-    body: typeof payload.body === 'string' ? payload.body.slice(0, 200) : 'An event reminder is due.',
-    icon: './icon-192.png', badge: './reminder-badge.png',
-    // The OS plays the notification channel's sound, including with no windows open.
-    silent: false, renotify: false,
-    tag: typeof payload.tag === 'string' ? payload.tag : 'checky-reminder',
-    data: { url: typeof payload.url === 'string' ? payload.url : '/' }
-  }));
+  event.waitUntil((async () => {
+    if (payload.followUp && payload.deliveryId && self.registration.getNotifications) {
+      const shown = await self.registration.getNotifications({ tag: payload.tag });
+      if (shown.some(notice => notice.data?.deliveryId === payload.deliveryId)) return;
+    }
+    await self.registration.showNotification("Checky's List reminder", {
+      body: typeof payload.body === 'string' ? payload.body.slice(0, 200) : 'An event reminder is due.',
+      icon: './icon-192.png', badge: './reminder-badge.png',
+      // The OS plays the notification channel's sound, including with no windows open.
+      silent: false, renotify: payload.followUp === true,
+      tag: typeof payload.tag === 'string' ? payload.tag : 'checky-reminder',
+      data: { url: typeof payload.url === 'string' ? payload.url : '/', deliveryId: payload.deliveryId }
+    });
+  })());
 });
 self.addEventListener('notificationclick', event => {
   event.notification.close();

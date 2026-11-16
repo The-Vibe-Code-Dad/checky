@@ -1,3 +1,4 @@
+const reminderState = require('./reminder-state.js')
 const SUBS = 'checky_push_subscriptions'
 const DELIVERIES = 'checky_push_deliveries'
 function auth(e) {
@@ -66,6 +67,7 @@ function validReminder(item) {
   return typeof item?.id === 'string' && item.id.length > 0 &&
     typeof item.reminderAt === 'string' && Number.isFinite(Date.parse(item.reminderAt)) &&
     (item.text == null || typeof item.text === 'string') &&
+    (item.reminderFollowUpMinutes == null || reminderState.followUpMinutes(item.reminderFollowUpMinutes) !== null) &&
     (item.reminderCheckedAt == null || typeof item.reminderCheckedAt === 'string')
 }
 function dueReminder(tab, item, now, enabledAt) {
@@ -73,7 +75,8 @@ function dueReminder(tab, item, now, enabledAt) {
   const at = item.reminderRepeat && item.reminderRepeat !== 'none'
     ? require(__hooks + '/lib/reminder-schedule.js').latestOccurrence(item, now)
     : Date.parse(item.reminderAt)
-  if (!Number.isFinite(at) || at > now || at < enabledAt || at < now - 86400000) return null
+  const slot = reminderState.dueSlot(at, item.reminderFollowUpMinutes, now, enabledAt)
+  if (!Number.isFinite(slot)) return null
   // A checked repeating item reopens for its next occurrence without a
   // background database write/version bump that could conflict with edits.
   const checkedAt = Date.parse(item.reminderCheckedAt)
@@ -88,7 +91,7 @@ function dueReminder(tab, item, now, enabledAt) {
   }
   if (item.done && (!repeating || !Number.isFinite(checkedAt) || at <= checkedAt)) return null
   if (repeating && require(__hooks + '/lib/reminder-schedule.js').skipsOccurrence(item, at)) return null
-  return { id: item.id, at: new Date(at).toISOString(), text: (item.text || 'Checklist event').slice(0, 160), tab: tab.name.slice(0, 120) }
+  return { id: item.id, at: new Date(slot).toISOString(), occurrence: new Date(at).toISOString(), text: (item.text || 'Checklist event').slice(0, 160), tab: tab.name.slice(0, 120) }
 }
 function dueItems(data, now, enabledAt) {
   const due = []
@@ -133,6 +136,8 @@ function deliver(app) {
           for (const item of dueItems(data, start, Date.parse(sub.getString('enabledAt')))) {
             if (Date.now() - start > 45000) return
             const eventKey = $security.sha256(JSON.stringify([collection, list.id, item.id, item.at]))
+            const followUp = item.at !== item.occurrence
+            const tag = followUp ? $security.sha256(JSON.stringify([collection, list.id, item.id, item.occurrence])) : eventKey
             let delivery
             app.runInTransaction((tx) => {
               try { delivery = tx.findFirstRecordByFilter(DELIVERIES, 'subscription = {:sub} && eventKey = {:key}', { sub: sub.id, key: eventKey }) } catch (_) {}
@@ -152,7 +157,7 @@ function deliver(app) {
             let result
             try {
               result = transport('/send', { subscription: JSON.parse(sub.getString('subscription')), payload: {
-                title: "Checky's List reminder", body: item.text, tag: eventKey,
+                title: "Checky's List reminder", body: item.text, tag, followUp, deliveryId: eventKey,
                 url: '/?reminder=' + encodeURIComponent(collection + ':' + list.id) + '&tab=' + queryValue(item.tab)
               } })
             } catch (_) { continue }
