@@ -21,6 +21,9 @@ function normalizeHostedSession(session) {
   const user = safe.user && typeof safe.user === "object" ? safe.user : {};
   return {
     authenticated: !!safe.authenticated,
+    offline: !!safe.offline,
+    unavailable: !!safe.unavailable,
+    recordId: typeof safe.recordId === "string" ? safe.recordId : "",
     setupRequired: !!safe.setupRequired,
     user: {
       id: typeof user.id === "string" ? user.id : "",
@@ -947,6 +950,28 @@ async function syncChecklist(source) {
   if (!didFlushPendingSave) {
     flashPullSyncIndicator("Failed to save checklist.", true, 1600);
     return;
+  }
+  if (state.hostedSession.unavailable) {
+    const previous = state.hostedSession;
+    const current = normalizeHostedSession(await window.checkyStorage.getHostedViewSession());
+    if (current.unavailable) {
+      if (previous.offline && !current.offline) window.location.reload();
+      else if (source !== "reconnect") flashPullSyncIndicator(previous.offline ? "Offline. Changes are saved on this device." : "Connect to Checky to sign in.", false, 1800);
+      return;
+    }
+    if (!previous.offline && !current.authenticated) {
+      state.hostedSession = current;
+      setLoginStatus("");
+      window.checkyHostedShellReady?.(current);
+      return;
+    }
+    if (!previous.offline || !current.authenticated || current.user.id !== previous.user.id) {
+      if (await flushPendingSave()) window.location.reload();
+      return;
+    }
+    state.hostedSession = current;
+    void window.checkyReminders?.init(current.user.id);
+    void loadInstalledAddons();
   }
   closeItemContextMenu();
   clearTimeout(pullSyncFeedbackTimer);
@@ -2312,7 +2337,7 @@ async function prepareForAppUpdate(showProgress) {
   if (document.querySelector('dialog[open]') || state.ui.editingTabIndex !== null) {
     throw new Error('Finish the open reminder or tab edit, then choose Update now.');
   }
-  if (!hasHostedLoginCredentials()) return;
+  if (!hasHostedLoginCredentials() && !state.hostedSession.offline) return;
   showProgress?.('Saving your checklist…');
   syncVisibleItemsToState();
   clearPendingSave();
@@ -2773,14 +2798,23 @@ async function init() {
   state.dataLocation = loaded.dataLocation;
   state.syncRestorePoint = normalizeSyncRestorePointInfo(loaded.syncRestorePoint);
   state.ui.loginOverlayOpen = isHostedWebRuntime()
-    ? !hasHostedLoginCredentials()
+    ? !(hasHostedLoginCredentials() || state.hostedSession.offline)
     : false;
+  if (state.hostedSession.offline) {
+    state.currentChecklistId = state.hostedSession.recordId;
+    setStatus("Offline. Showing the checklist saved on this device.");
+  } else if (state.hostedSession.unavailable) {
+    setLoginStatus("Connect to Checky to sign in on this device.");
+  }
   render();
+  window.checkyHostedShellReady?.(state.hostedSession);
   window.checkyPrepareForUpdate = prepareForAppUpdate;
-  void window.checkyReminders?.init(state.hostedSession.user.id);
+  void window.checkyReminders?.init(state.hostedSession.authenticated ? state.hostedSession.user.id : "");
   void loadInstalledAddons();
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) void loadInstalledAddons();
+    if (document.hidden) return;
+    if (state.hostedSession.unavailable && navigator.onLine) void runManualSync("reconnect");
+    else void loadInstalledAddons();
   });
   if (navigator.onLine && hasHostedLoginCredentials()) {
     setTimeout(async () => {
@@ -2799,8 +2833,27 @@ async function init() {
       }
     }, 500);
   }
+  // A tunnel can recover without the phone's network status changing.
+  if (state.hostedSession.unavailable) {
+    let delay = 5000;
+    const retry = async () => {
+      if (!state.hostedSession.unavailable) return;
+      if (navigator.onLine && !document.hidden) await runManualSync("reconnect");
+      if (state.hostedSession.unavailable) {
+        delay = Math.min(delay * 2, 60000);
+        setTimeout(retry, delay);
+      }
+    };
+    setTimeout(retry, delay);
+  }
+  window.addEventListener("storage", event => {
+    if (state.ui.loginOverlayOpen) return;
+    if (event.key === null || (event.key === "checky.base.offlineLocked" && event.newValue === "1")) {
+      window.location.reload();
+    }
+  });
   window.addEventListener("online", () => {
-    if (hasHostedLoginCredentials()) void runManualSync("reconnect");
+    if (hasHostedLoginCredentials() || state.hostedSession.unavailable) void runManualSync("reconnect");
   });
 }
 

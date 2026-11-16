@@ -400,6 +400,10 @@ base:
 - The backend rejects malformed reminder text on save and skips malformed stored reminders during delivery so other items and subscribers still receive notifications.
 - Removing a shared member also clears their assignment. Editing a profile can no longer restore access. The upgrade clears old assignments for users who already lost access.
 
+## v0082 - 2026-11-16
+- Fixed the installed web app getting stuck on Checking session or asking for a login when reopening a previously synced checklist offline. A stalled startup request now falls back to the saved checklist after four seconds.
+- Offline edits survive reopening and sync after reconnecting to the same account. A confirmed sign-out or expired session requires signing in again before reopening the saved checklist.
+
 desktop:
 
 ## v0001 - 2026-04-07
