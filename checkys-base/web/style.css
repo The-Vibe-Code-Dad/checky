@@ -90,6 +90,21 @@ button,input,select,textarea{
   background:rgba(0,0,0,.44);
   z-index:40;
 }
+.nav-dialog{
+  position:fixed;
+  inset:0;
+  width:min(100%, 720px);
+  height:100dvh;
+  max-width:none;
+  max-height:none;
+  margin:0 auto;
+  padding:0;
+  border:0;
+  background:transparent;
+  color:inherit;
+  overflow:visible;
+}
+.nav-dialog::backdrop{background:transparent;}
 .nav-drawer{
   position:absolute;
   inset:0 auto 0 0;
@@ -99,6 +114,9 @@ button,input,select,textarea{
   padding:calc(14px + env(safe-area-inset-top)) 14px calc(18px + env(safe-area-inset-bottom));
   z-index:50;
   overflow-y:auto;
+}
+@media (forced-colors:active){
+  .nav-drawer{background:Canvas;border-color:CanvasText;}
 }
 .nav-drawer.hidden,
 .nav-backdrop.hidden{
@@ -231,6 +249,7 @@ body.login-open #app{
   border-radius:4px;
 }
 .title{
+  margin:0;
   font-size:18px;
   font-weight:700;
   letter-spacing:.01em;
@@ -415,12 +434,20 @@ input[type="text"], input[type="email"], input[type="password"], input[type="url
   background:var(--accent-2);
 }
 .tab-label{
+  border:0;
+  padding:0;
+  min-height:28px;
+  color:inherit;
+  background:transparent;
+  text-align:left;
+  cursor:pointer;
   min-width:0;
   flex:1;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
 }
+.tab-label:focus-visible{outline:2px solid #9db6ff;outline-offset:2px;}
 .tab-name-input{
   min-width:0;
   flex:1;
@@ -438,8 +465,8 @@ input[type="text"], input[type="email"], input[type="password"], input[type="url
   opacity:.65;
   cursor:default;
 }
-.btn-primary{background:var(--accent);}
-.btn-primary:hover{background:var(--accent-2);}
+.btn-primary{background:var(--accent-2);}
+.btn-primary:hover{background:#3258be;}
 .btn-ghost{background:var(--muted);}
 .btn-ghost:hover{background:#505050;}
 .btn-danger{background:var(--danger);}

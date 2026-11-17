@@ -8,7 +8,8 @@ button,a,input,select,textarea{-webkit-tap-highlight-color:transparent}
 button{border:1px solid var(--border);border-radius:9px;background:#343434;padding:10px 15px;min-height:44px;cursor:pointer}
 button:disabled{opacity:.5;cursor:default}
 button:hover:not(:disabled){filter:brightness(1.15)}
-.primary{background:var(--accent);border-color:var(--accent);font-weight:600;color:white}
+.primary{background:#3b65d6;border-color:#3b65d6;font-weight:600;color:white}
+.primary:hover:not(:disabled){background:#3258be;border-color:#3258be;filter:none}
 .danger{color:#ffb2b2}
 a{color:#b1c5ff;text-underline-offset:4px}
 :focus-visible{outline:3px solid #a6c0ff;outline-offset:3px}

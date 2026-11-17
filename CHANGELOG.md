@@ -410,6 +410,12 @@ base:
 ## v0084 - 2026-11-16
 - Serve the signed Windows upgrade on every Base image. Standard images relay the selected release on demand and with-app images serve their bundled copy.
 
+## v0085 - 2026-11-17
+- Applied Google's Modern Web Guidance to checklist navigation and forms. The list drawer uses a native modal, moves focus inside, closes with Escape, and restores focus to its trigger. List names are keyboard-operable buttons, with existing hold menus and drag handles retained.
+- Named task checkboxes, task descriptions, tab renaming and Done search for assistive technology, and added page landmarks. Enter waits for composed text input before committing edits or signing in, including the Safari composition fallback.
+- Increased text contrast on Base and Baby tracker action buttons and kept the drawer opaque in system high-contrast mode.
+- Verified the main list, navigation, Settings, Done, Baby log and entry form with axe-core, keyboard/phone browser regressions, the full Baby tracker and installed-web/offline suites, and web build/cache checks. The guidance scan no longer flags the six unsafe Enter handlers.
+
 desktop:
 
 ## v0001 - 2026-04-07

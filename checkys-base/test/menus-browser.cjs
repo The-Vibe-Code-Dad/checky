@@ -58,6 +58,53 @@ async function main() {
       // Base schedules startup sync after first render. A merely idle renderer can
       // still rebuild the tabs during the first hold, so wait for that sync to finish.
       await page.waitForFunction(() => window.checkyTestSyncStarted && typeof state !== 'undefined' && state.data.tabs[0]?.id === 'alpha' && !state.ui.syncInProgress);
+      if (surface === 'base') {
+        const toggle = page.locator('#navToggle');
+        await toggle.focus();
+        await toggle.press('Enter');
+        assert.equal(await page.locator('#navDialog').evaluate(dialog => dialog.matches(':modal')), true);
+        assert.equal(await page.evaluate(() => document.activeElement.id), 'navCloseBtn');
+        await page.locator('#list textarea').first().evaluate(input => input.focus());
+        assert.equal(await page.evaluate(() => document.activeElement.closest('#navDialog') !== null), true, 'Background controls cannot take focus');
+        await page.keyboard.press('Escape');
+        await page.locator('#navDrawer').waitFor({ state: 'hidden' });
+        assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+        assert.equal(await page.evaluate(() => document.activeElement.id), 'navToggle');
+        await toggle.click();
+        const backdrop = page.locator('#navBackdrop');
+        const bounds = await backdrop.boundingBox();
+        await backdrop.click({ position: { x: bounds.width - 4, y: bounds.height / 2 } });
+        await page.locator('#navDrawer').waitFor({ state: 'hidden' });
+        assert.equal(await page.evaluate(() => document.activeElement.id), 'navToggle');
+        await toggle.click();
+        await page.getByRole('button', { name: 'Beta', exact: true }).press('Enter');
+        assert.equal(await page.evaluate(() => state.data.tabs[state.data.active].id), 'beta');
+        await toggle.click();
+        await page.getByRole('button', { name: 'Alpha', exact: true }).press('Space');
+        assert.equal(await page.evaluate(() => state.data.tabs[state.data.active].id), 'alpha');
+        assert.equal(await page.locator('#list input[type=checkbox]').first().getAttribute('aria-label'), 'Task 0');
+        await page.getByRole('textbox', { name: 'Task description', exact: true }).first().fill('Changed task');
+        assert.equal(await page.locator('#list input[type=checkbox]').first().getAttribute('aria-label'), 'Changed task');
+        await page.getByRole('textbox', { name: 'Task description', exact: true }).first().fill('Task 0');
+        const submits = await page.evaluate(() => {
+          const original = submitHostedLogin;
+          let count = 0;
+          submitHostedLogin = async () => { count++; };
+          try {
+            for (const id of ['loginEmailInput', 'loginPasswordInput']) {
+              const input = document.getElementById(id);
+              for (const options of [{isComposing:true}, {keyCode:229}]) {
+                input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...options }));
+              }
+            }
+            const composing = count;
+            document.getElementById('loginPasswordInput').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+            return { composing, normal: count };
+          } finally { submitHostedLogin = original; }
+        });
+        assert.deepEqual(submits, { composing: 0, normal: 1 });
+        console.log('PASS Base: modal navigation, Escape/backdrop dismissal, focus restoration, task labels and IME-safe login');
+      }
       await checkEarlyReminders(page, surface);
       await page.evaluate(surface => {
         const api = surface === 'base' ? window.checkyStorage : window.checkyApi;
@@ -111,7 +158,14 @@ async function main() {
       assert.equal(await page.evaluate(() => state.data.tabs.length), 4, 'Releasing the hold must not delete/select a menu action');
       if (process.env.CHECKY_SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.CHECKY_SCREENSHOT_DIR, `tab-menu-${surface}.png`) });
       await menu.getByRole('button', { name: 'Rename', exact: true }).click();
-      await page.locator('.tab-name-input').fill('Renamed'); await page.locator('.tab-name-input').press('Enter');
+      await page.locator('.tab-name-input').fill('Renamed');
+      if (surface === 'base') {
+        for (const options of [{isComposing:true}, {keyCode:229}]) {
+          await page.locator('.tab-name-input').dispatchEvent('keydown', { key: 'Enter', ...options });
+          assert.equal(await page.locator('.tab-name-input').isVisible(), true, 'IME confirmation keeps the rename editor open');
+        }
+      }
+      await page.locator('.tab-name-input').press('Enter');
       await openTab('Renamed'); await menu.getByRole('button', { name: 'Move down', exact: true }).click();
       assert.deepEqual(await page.evaluate(() => state.data.tabs.map(tab => tab.id)), ['beta', 'alpha', 'gamma', 'archive']);
       assert.equal(await page.evaluate(() => state.data.tabs[state.data.active].id), 'alpha');

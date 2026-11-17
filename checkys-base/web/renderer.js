@@ -172,6 +172,7 @@ const els = {
   navToggle: document.getElementById("navToggle"),
   navBackdrop: document.getElementById("navBackdrop"),
   navDrawer: document.getElementById("navDrawer"),
+  navDialog: document.getElementById("navDialog"),
   navCloseBtn: document.getElementById("navCloseBtn"),
   contentScroll: document.getElementById("contentScroll"),
   pullSyncIndicator: document.getElementById("pullSyncIndicator"),
@@ -614,7 +615,16 @@ function setDrawerOpen(isOpen) {
   state.ui.drawerOpen = isOpen;
   els.navDrawer.classList.toggle("hidden", !isOpen);
   els.navBackdrop.classList.toggle("hidden", !isOpen);
-  els.navDrawer.setAttribute("aria-hidden", String(!isOpen));
+  els.navToggle.setAttribute("aria-expanded", String(isOpen));
+  if (isOpen && !els.navDialog.open) {
+    // List menus must share the modal's top layer so they remain interactive.
+    els.navDialog.appendChild(els.itemContextMenu);
+    els.navDialog.showModal();
+  } else if (!isOpen && els.itemContextMenu.parentElement === els.navDialog) {
+    closeItemContextMenu();
+    els.navDialog.close();
+    document.body.appendChild(els.itemContextMenu);
+  }
 }
 
 function closeDrawer() {
@@ -1201,15 +1211,15 @@ function stripDoneStamp(text) {
 }
 
 function bindTabContextMenu(element, index) {
-  element.tabIndex = 0;
+  const trigger = element.querySelector(".tab-label");
   window.checkyContextMenu.bindHold(element, (x, y) => openTabContextMenu(index, x, y));
   element.oncontextmenu = (event) => {
-    if (event.target.closest("input, button, .drag-handle")) return;
+    if (event.target.closest("input, button:not(.tab-label), .drag-handle")) return;
     event.preventDefault();
     openTabContextMenu(index, event.clientX, event.clientY);
   };
-  element.onkeydown = (event) => {
-    if (event.target !== element || !(event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) return;
+  trigger.onkeydown = (event) => {
+    if (!(event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) return;
     event.preventDefault();
     const bounds = element.getBoundingClientRect();
     openTabContextMenu(index, bounds.left, bounds.bottom);
@@ -1737,6 +1747,7 @@ function renderSettings() {
 
 function renderLoginOverlay() {
   const isOpen = !!state.ui.loginOverlayOpen;
+  if (isOpen && state.ui.drawerOpen) closeDrawer();
   els.loginOverlay.classList.toggle("hidden", !isOpen);
   els.loginOverlay.setAttribute("aria-hidden", String(!isOpen));
   document.body.classList.toggle("login-open", isOpen);
@@ -1754,11 +1765,12 @@ function renderTabs() {
     if (state.ui.editingTabIndex === index) {
       const input = document.createElement("input");
       input.className = "tab-name-input";
+      input.setAttribute("aria-label", "Tab name");
       input.value = tab.name;
       input.onpointerdown = (event) => event.stopPropagation();
       input.onclick = (event) => event.stopPropagation();
       input.onkeydown = (event) => {
-        if (event.key === "Enter") {
+        if (event.key === "Enter" && !event.isComposing && event.keyCode !== 229) {
           finishTabEditing(index, input);
         }
       };
@@ -1779,9 +1791,11 @@ function renderTabs() {
       container.appendChild(done);
       addAlwaysShowOption(container, tab, input);
     } else {
-      const label = document.createElement("span");
+      const label = document.createElement("button");
+      label.type = "button";
       label.className = "tab-label";
       label.textContent = tab.name;
+      label.setAttribute("aria-current", String(!activeAddon && index === state.data.active));
       container.appendChild(label);
 
       const edit = document.createElement("button");
@@ -1894,7 +1908,7 @@ function renderTabs() {
       if (state.ui.editingTabIndex === index) {
         return;
       }
-      if (event.target.closest("input, button")) {
+      if (event.target.closest("input, button:not(.tab-label)")) {
         return;
       }
       state.ui.doneViewOpen = false;
@@ -1994,6 +2008,7 @@ function renderArchive(doneTab) {
 
     const text = document.createElement("textarea");
     text.value = item.text;
+    text.setAttribute("aria-label", "Completed task description");
     text.oninput = () => {
       item.text = text.value;
       persistChecklistImmediately();
@@ -2134,6 +2149,7 @@ function renderItems() {
     const check = document.createElement("input");
     check.type = "checkbox";
     check.checked = window.checkyReminderState.isChecked(item);
+    check.setAttribute("aria-label", item.text.trim() || "Untitled task");
     check.onchange = () => {
       if (suppressCheckboxClick) {
         suppressCheckboxClick = false;
@@ -2158,9 +2174,11 @@ function renderItems() {
 
     const textarea = document.createElement("textarea");
     textarea.value = item.text;
+    textarea.setAttribute("aria-label", "Task description");
     textarea.placeholder = "Checklist description...";
     textarea.oninput = () => {
       item.text = textarea.value;
+      check.setAttribute("aria-label", item.text.trim() || "Untitled task");
       persistChecklistImmediately();
     };
     textarea.onpointerdown = (event) => {
@@ -2436,6 +2454,9 @@ function bindEvents() {
   els.navBackdrop.onclick = () => {
     closeDrawer();
   };
+  els.navDialog.addEventListener("close", () => {
+    if (!els.navDialog.open) setDrawerOpen(false);
+  });
 
   for (const tabs of [els.checklistTabPanel, els.alwaysVisibleTabs]) tabs.addEventListener('click', event => {
     if (!activeAddon || event.target.closest('.addon-link')) return;
@@ -2492,7 +2513,7 @@ function bindEvents() {
     updateAdvancedSettings("serverUrl", els.serverUrlInput.value.trim());
   };
   els.serverUrlInput.onkeydown = (event) => {
-    if (event.key === "Enter") {
+    if (event.key === "Enter" && !event.isComposing && event.keyCode !== 229) {
       event.preventDefault();
       els.serverUrlInput.blur();
     }
@@ -2505,7 +2526,7 @@ function bindEvents() {
     updateAdvancedSettings("email", els.syncEmailInput.value.trim());
   };
   els.syncEmailInput.onkeydown = (event) => {
-    if (event.key === "Enter") {
+    if (event.key === "Enter" && !event.isComposing && event.keyCode !== 229) {
       event.preventDefault();
       els.syncEmailInput.blur();
     }
@@ -2518,7 +2539,7 @@ function bindEvents() {
     updateAdvancedSettings("password", els.syncPasswordInput.value);
   };
   els.syncPasswordInput.onkeydown = (event) => {
-    if (event.key === "Enter") {
+    if (event.key === "Enter" && !event.isComposing && event.keyCode !== 229) {
       event.preventDefault();
       els.syncPasswordInput.blur();
     }
@@ -2531,7 +2552,7 @@ function bindEvents() {
     updateAdvancedSettings("email", els.loginEmailInput.value.trim());
   };
   els.loginEmailInput.onkeydown = async (event) => {
-    if (event.key === "Enter") {
+    if (event.key === "Enter" && !event.isComposing && event.keyCode !== 229) {
       event.preventDefault();
       await submitHostedLogin();
     }
@@ -2541,7 +2562,7 @@ function bindEvents() {
     updateAdvancedSettings("password", els.loginPasswordInput.value);
   };
   els.loginPasswordInput.onkeydown = async (event) => {
-    if (event.key === "Enter") {
+    if (event.key === "Enter" && !event.isComposing && event.keyCode !== 229) {
       event.preventDefault();
       await submitHostedLogin();
     }

@@ -36,7 +36,7 @@
     const cancel = () => { clearTimeout(timer); timer = null; };
     element.addEventListener('pointerdown', event => {
       cancel();
-      if (event.button !== 0 || event.target.closest('button, input, textarea, select, .drag-handle')) return;
+      if (event.button !== 0 || event.target.closest('button:not(.tab-label), input, textarea, select, .drag-handle')) return;
       pointer = { id: event.pointerId, x: event.clientX, y: event.clientY };
       timer = setTimeout(() => { timer = null; hold(event); open(pointer.x, pointer.y); }, 350);
     });
