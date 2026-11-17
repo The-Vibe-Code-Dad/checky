@@ -16,18 +16,18 @@
 </head>
   <body>
   <div id="app">
-    <div class="topbar">
-      <button class="nav-toggle" id="navToggle" aria-label="Open navigation menu">
+    <header class="topbar">
+      <button class="nav-toggle" id="navToggle" aria-label="Open navigation menu" aria-controls="navDialog" aria-expanded="false" aria-haspopup="dialog">
         <span></span>
         <span></span>
         <span></span>
       </button>
       <div class="brand">
         <img src="./logo.png" alt="Checky's List logo" class="brand-logo">
-        <div class="title">Checky's List</div>
+        <h1 class="title">Checky's List</h1>
       </div>
       <div class="topbar-spacer" aria-hidden="true"></div>
-    </div>
+    </header>
 
     <div id="appUpdateBanner" class="app-update-banner" role="status" aria-live="polite" hidden>
       <span id="appUpdateNotice">A Checky update is ready.</span>
@@ -40,8 +40,9 @@
       <button id="desktopInstallLater" type="button" class="btn btn-ghost">Maybe later</button>
     </aside>
 
+    <dialog id="navDialog" class="nav-dialog" aria-label="Lists">
     <div id="navBackdrop" class="nav-backdrop hidden"></div>
-    <aside id="navDrawer" class="nav-drawer hidden" aria-hidden="true">
+    <nav id="navDrawer" class="nav-drawer hidden" aria-label="Lists">
       <div class="nav-drawer-header">
         <div class="nav-header-actions">
           <button class="btn btn-ghost nav-icon-only" id="doneToggle" aria-label="Open done list" title="Done list">
@@ -50,7 +51,7 @@
           <button class="btn btn-ghost nav-icon-only" id="settingsToggle" aria-label="Open settings" title="Settings">
             <span class="nav-icon" aria-hidden="true">&#9881;</span>
           </button>
-          <button class="btn btn-ghost nav-close" id="navCloseBtn" aria-label="Close navigation menu">Close</button>
+          <button class="btn btn-ghost nav-close" id="navCloseBtn" aria-label="Close navigation menu" autofocus>Close</button>
         </div>
       </div>
 
@@ -73,9 +74,10 @@
         </div>
 
       </div>
-    </aside>
+    </nav>
+    </dialog>
 
-    <div class="content-scroll" id="contentScroll">
+    <main class="content-scroll" id="contentScroll">
       <section id="addonView" class="addon-view hidden" aria-label="Selected list">
         <iframe id="addonFrame" title="Selected list"></iframe>
       </section>
@@ -191,7 +193,7 @@
       <hr id="mainDivider">
 
       <div id="doneArchiveTools" class="archive-tools hidden">
-        <input id="doneSearchInput" type="text" placeholder="Search completed items...">
+        <input id="doneSearchInput" type="text" aria-label="Search completed items" placeholder="Search completed items...">
       </div>
 
       <div id="list"></div>
@@ -199,7 +201,7 @@
       <div class="row-actions">
         <button class="btn btn-primary" id="addItemBtn">+ Item</button>
       </div>
-    </div>
+    </main>
   </div>
 
   <div id="loginOverlay" class="login-overlay hidden" aria-hidden="true">
