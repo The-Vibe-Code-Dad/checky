@@ -1,6 +1,10 @@
 const assert = require('node:assert/strict');
 const path = require('node:path');
 
+// A closed native dialog stops matching getByRole before its queued close event
+// removes the element and commits the answer. Wait for actual DOM removal.
+const waitForPromptRemoval = page => page.locator('dialog.reminder-check-dialog').waitFor({ state: 'detached' });
+
 async function checkEarlyReminders(page, surface) {
   const original = await page.evaluate(() => JSON.parse(JSON.stringify(state.data)));
   await page.clock.setFixedTime(new Date('2030-03-10T10:00:00Z'));
@@ -24,14 +28,14 @@ async function checkEarlyReminders(page, surface) {
   assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= viewport.width && bounds.y >= 0 && bounds.y + bounds.height <= viewport.height);
   if (process.env.CHECKY_SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.CHECKY_SCREENSHOT_DIR, `early-reminder-${surface}.png`) });
   await dialog.getByRole('button', { name: 'Skip today’s reminder', exact: true }).click();
-  await dialog.waitFor({ state: 'detached' });
+  await waitForPromptRemoval(page);
   assert.equal((await current()).reminderSkipToday, true);
   assert.equal((await page.evaluate(async () => (await (window.checkyStorage || window.checkyApi).loadState()).checklist)).tabs[0].items[0].reminderSkipToday, true, 'Choice reaches storage');
   await checkbox.uncheck();
   assert.equal((await current()).reminderSkipToday, false);
   await openPrompt();
   await dialog.getByRole('button', { name: 'Keep reminder', exact: true }).click();
-  await dialog.waitFor({ state: 'detached' });
+  await waitForPromptRemoval(page);
   assert.equal((await current()).done, true);
   assert.equal((await current()).reminderSkipToday, false);
   await checkbox.uncheck();
@@ -39,7 +43,7 @@ async function checkEarlyReminders(page, surface) {
     await openPrompt();
     if (cancel === 'Escape') await page.keyboard.press('Escape');
     else await dialog.getByRole('button', { name: cancel, exact: true }).click();
-    await dialog.waitFor({ state: 'detached' });
+    await waitForPromptRemoval(page);
     assert.equal((await current()).done, false);
     assert.equal(await checkbox.isChecked(), false);
     assert.equal(await checkbox.evaluate(element => document.activeElement === element), true, 'Dismissal restores checkbox keyboard focus');
@@ -47,7 +51,7 @@ async function checkEarlyReminders(page, surface) {
   await openPrompt();
   await page.evaluate(() => { state.data.tabs[0].items[0].reminderAt = '2030-03-09T15:00:00Z'; });
   await dialog.getByRole('button', { name: 'Skip today’s reminder', exact: true }).click();
-  await dialog.waitFor({ state: 'detached' });
+  await waitForPromptRemoval(page);
   assert.equal((await current()).done, false, 'A delayed answer cannot overwrite a changed schedule');
   await page.evaluate(() => { state.data.tabs[0].items[0].reminderRepeat = 'none'; renderItems(); });
   await checkbox.check();
@@ -87,7 +91,7 @@ async function checkWeeklyEarlyReminders(page, surface) {
     if (action === 'Cancel' && process.env.CHECKY_SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.CHECKY_SCREENSHOT_DIR, `weekly-early-reminder-${surface}.png`) });
     if (action === 'Escape') await page.keyboard.press('Escape');
     else await dialog.getByRole('button', { name: 'Cancel', exact: true }).tap();
-    await dialog.waitFor({ state: 'detached' });
+    await waitForPromptRemoval(page);
     assert.equal((await current()).done, false);
     assert.equal(await checkbox.isChecked(), false);
     assert.equal(await checkbox.evaluate(element => document.activeElement === element), true);
@@ -96,7 +100,7 @@ async function checkWeeklyEarlyReminders(page, surface) {
   }
   await open();
   await dialog.getByRole('button', { name: 'Skip today’s reminder', exact: true }).press('Enter');
-  await dialog.waitFor({ state: 'detached' });
+  await waitForPromptRemoval(page);
   assert.equal((await current()).done, true);
   assert.equal((await current()).reminderSkipToday, true);
   const saved = await page.evaluate(async () => (await (window.checkyStorage || window.checkyApi).loadState()).checklist);
@@ -112,12 +116,12 @@ async function checkWeeklyEarlyReminders(page, surface) {
   await open();
   await page.evaluate(() => { state.data.tabs[0].weeklyChecklist.resetDay = 1; });
   await dialog.getByRole('button', { name: 'Skip today’s reminder', exact: true }).click();
-  await dialog.waitFor({ state: 'detached' });
+  await waitForPromptRemoval(page);
   assert.equal((await current()).done, false, 'A delayed answer cannot overwrite a changed weekly setup');
   await open();
   await page.clock.setFixedTime(new Date('2030-03-18T10:00:00Z'));
   await dialog.getByRole('button', { name: 'Skip today’s reminder', exact: true }).click();
-  await dialog.waitFor({ state: 'detached' });
+  await waitForPromptRemoval(page);
   assert.equal((await current()).done, false, 'A delayed answer cannot complete a day in a different week');
   await page.clock.setFixedTime(new Date('2030-03-10T10:00:00Z'));
   await page.evaluate(() => refreshRepeatingCheckboxes());

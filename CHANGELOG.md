@@ -455,6 +455,10 @@ base:
 - Fixed early-reminder browser tests to wait for native dialog closure before checking the saved answer. Installed-app tests now click to open confirmation without asserting a checkbox value before the user answers.
 - Passed the Base/desktop interaction and installed-web update/sync suites using the same Chromium version as CI.
 
+## v0095 - 2026-11-22
+- Fixed the early-reminder browser test race by waiting for actual dialog DOM removal after the native close event, instead of an accessible-role locator that stops matching as soon as the dialog is hidden. Kept all saved-choice, cancellation and stale-answer assertions for Base and desktop.
+- Passed the complete Base/desktop interaction suite with CI’s Chromium 156.0.8078.4. Reviewed native-dialog close-event guidance; application runtime code is unchanged.
+
 desktop:
 
 ## v0001 - 2026-04-07
