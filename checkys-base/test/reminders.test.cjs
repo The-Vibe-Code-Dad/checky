@@ -57,6 +57,24 @@ test('service worker displays push after all app windows close and restricts not
 });
 module.exports = { subscription };
 
+test('weekly follow-ups stay on their own local day and checked days stay quiet', () => {
+  for (const file of ['../web/weekly-checklist.js', '../../checkys-app/renderer/weekly-checklist.js']) {
+    const weekly = require(file);
+    for (const scenario of require('./fixtures/weekly-reminders.cjs').cases) {
+      const slot = weekly.notificationSlot(scenario.item, { weeklyChecklist: scenario.weeklyChecklist }, Date.parse(scenario.now), 0);
+      assert.deepEqual(Number.isFinite(slot) ? [new Date(slot).toISOString()] : [], scenario.expected, file + ' ' + JSON.stringify(scenario));
+    }
+    for (const [resetDay, reset] of [[0, '2026-11-22T05:00:00Z'], [1, '2026-11-23T05:00:00Z']]) {
+      const schedule = { resetDay, timeZone: 'America/New_York' };
+      const item = { done: true, reminderCheckedAt: '2026-11-21T22:00:00Z' };
+      assert.equal(weekly.isChecked(item, schedule, Date.parse('2026-11-22T00:00:00Z')), true, 'Saturday 7 pm is not the weekly reset');
+      assert.equal(weekly.isChecked(item, schedule, Date.parse(reset) - 1), true);
+      assert.equal(weekly.isChecked(item, schedule, Date.parse(reset)), false);
+      assert.equal(item.done, true, 'Displaying a reset must preserve saved completion history');
+    }
+  }
+});
+
 test('early-check prompt follows today in the reminder timezone, selected days and calendar boundaries', () => {
   const { hasReminderLaterToday } = require('../web/reminder-state.js');
   const item = { reminderAt: '2030-03-09T14:00:00Z', reminderRepeat: 'daily', reminderTimeZone: 'America/New_York' };

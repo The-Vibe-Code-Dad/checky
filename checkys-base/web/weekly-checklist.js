@@ -99,7 +99,12 @@
     const at = localOccurrence(item, now);
     if (!Number.isFinite(at) || at > now) return NaN;
     const schedule = tab.weeklyChecklist, day = schedule?.itemIds?.indexOf(item.id) ?? -1;
-    if (day >= 0 && (!schedule.days.includes(day) || weekStart(at, schedule) !== weekStart(now, schedule) || isChecked(item, schedule, now))) return NaN;
+    if (day >= 0) {
+      if (!schedule.days.includes(day) || isChecked(item, schedule, now)) return NaN;
+      // Follow up only on this row's local calendar day, never later in the week.
+      const today = Math.floor(wallTime(now, schedule.timeZone) / DAY);
+      if (Math.floor(wallTime(at, schedule.timeZone) / DAY) !== today || new Date(today * DAY).getUTCDay() !== day) return NaN;
+    }
     const checked = Date.parse(item.reminderCheckedAt);
     if (item.done && (!Number.isFinite(checked) || !item.reminderRepeat || item.reminderRepeat === 'none' || at <= checked || skipped(item, at))) return NaN;
     const state = typeof module === 'undefined' ? window.checkyReminderState : require('./reminder-state.js');
@@ -198,7 +203,7 @@
       get('.week-time').hidden = time.disabled;
       get('.week-follow').hidden = follow.disabled = time.disabled;
       get('.week-summary').textContent = schedule.days.length ?
-        'Checkmarks clear every ' + names[schedule.resetDay] + ' at midnight (' + schedule.timeZone + ').' :
+        'Checkmarks clear every ' + names[schedule.resetDay] + ' at midnight (' + schedule.timeZone + '). Reminders repeat only on their selected day, until checked or midnight.' :
         'No reminder days selected.';
     }
     update();

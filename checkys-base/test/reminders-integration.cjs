@@ -56,7 +56,8 @@ routerAdd('POST', '/api/checky-test/reminders/calendar', (e) => {
 }, $apis.requireSuperuserAuth())
 routerAdd('POST', '/api/checky-test/reminders/next', (e) => e.json(200, {results:e.requestInfo().body.cases.map(test => {
   const schedule = require(__hooks + '/lib/reminder-schedule.js')
-  const at = (test.reset ? schedule.resetOccurrence : schedule.nextOccurrence)(test.item, Date.parse(test.after))
+  const at = test.weeklyChecklist ? schedule.weeklyResetAt(test.weeklyChecklist, Date.parse(test.after))
+    : (test.reset ? schedule.resetOccurrence : schedule.nextOccurrence)(test.item, Date.parse(test.after))
   return Number.isFinite(at) ? new Date(at).toISOString() : null
 })}), $apis.requireSuperuserAuth())`);
     child = spawn(binary, ['serve', '--automigrate=false', '--http=127.0.0.1:' + port, '--dir=' + path.join(dir, 'data'), '--hooksDir=' + path.join(dir, 'hooks'), '--migrationsDir=' + path.join(__dirname, '../pocketbase/pb_migrations')], {
@@ -119,6 +120,7 @@ routerAdd('POST', '/api/checky-test/reminders/next', (e) => e.json(200, {results
       calendarCase('weekly', '2030-03-09T14:00:00Z', '2030-03-11T13:05:00Z', null, { reminderDays: ['1'] }),
       calendarCase('weekly', '2030-03-09T14:00:00Z', '2030-03-11T13:05:00Z', null, { reminderDays: 'Monday' })
     ];
+    calendarCases.push(...require('./fixtures/weekly-reminders.cjs').cases);
     for (const test of calendarCases) {
       const slot = require('../web/weekly-checklist.js').notificationSlot(test.item, {weeklyChecklist:test.weeklyChecklist}, Date.parse(test.now), Date.parse(test.enabledAt || '2000-01-01'));
       assert.deepEqual(Number.isFinite(slot) ? [new Date(slot).toISOString()] : [], test.expected, 'Desktop ' + JSON.stringify(test));
@@ -140,6 +142,9 @@ routerAdd('POST', '/api/checky-test/reminders/next', (e) => e.json(200, {results
       ['daily', '2026-11-01T06:30:00Z', '2026-11-01T06:00:00Z', '2026-11-01T06:30:00Z'],
       ['weekly', '2030-03-09T14:00:00Z', '2030-03-11T13:30:00Z', null, {reminderDays:[]}]
     ].map(([repeat, first, after, expected, extra]) => ({ item: calendarCase(repeat, first, after, null, extra).item, after, expected:expected ? new Date(expected).toISOString() : null }));
+    for (const [resetDay, expected] of [[0, '2026-11-22T05:00:00.000Z'], [1, '2026-11-23T05:00:00.000Z']]) {
+      nextCases.push({weeklyChecklist: { resetDay, timeZone: 'America/New_York' }, after: '2026-11-21T22:00:00Z', expected});
+    }
     const next = await req('/api/checky-test/reminders/next', 'POST', {cases:nextCases}, ah);
     assert.equal(next.status, 200, JSON.stringify(next.data));
     nextCases.forEach((test,i) => assert.equal(next.data.results[i], test.expected, JSON.stringify(test)));

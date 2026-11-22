@@ -416,6 +416,15 @@ base:
 - Increased text contrast on Base and Baby tracker action buttons and kept the drawer opaque in system high-contrast mode.
 - Verified the main list, navigation, Settings, Done, Baby log and entry form with axe-core, keyboard/phone browser regressions, the full Baby tracker and installed-web/offline suites, and web build/cache checks. The guidance scan no longer flags the six unsafe Enter handlers.
 
+## v0088 - 2026-11-21
+- Fixed weekly checklist follow-ups alerting for earlier weekdays: each row can notify only on its own calendar day in the saved timezone, ending at local midnight or when checked. A weekly reset does not send a backlog.
+- Clarified the weekly reminder window in Edit week and the Base documentation. Added Saturday-evening, Sunday/Monday midnight, two-list, stale weekday and daylight-saving regressions across browser and backend schedulers.
+- Stabilized the existing early-reminder popup browser test by waiting for the confirmation dialog instead of asserting a checkbox state before the user answers.
+- Passed 17 unit/build/security checks, real PocketBase reminder integration and the Base/desktop browser suites. Early checkmark clearing was not reproduced with the saved America/New_York schedule. Local source changes only; no hosted deployment or installer publication was performed.
+
+## v0089 - 2026-11-21
+- Required Google's Modern Web Guidance skill in AGENTS.md for web and client-side changes, with its official source, guidance review, browser compatibility, verification, and external-drive storage requirements.
+
 desktop:
 
 ## v0001 - 2026-04-07
@@ -569,6 +578,9 @@ desktop:
 
 ## v0043 - 2026-11-16
 - The legacy Windows renderer offers the migration to Checky Desktop during an update check and saves pending edits before opening setup. The released 1.0.8 uses its existing Update button and confirmation.
+
+## v0044 - 2026-11-21
+- Kept the desktop weekly scheduler and Edit week explanation aligned with Base: weekday follow-ups stop at the end of their local day. The native desktop bundle continues to use canonical Base web source.
 
 pocketbase:
 
@@ -728,3 +740,6 @@ pocketbase:
 
 ## v0044 - 2026-11-16
 - Deliver the latest due follow-up for an unchecked task, retain per-device retry protection, and preserve reminder intervals when older clients sync.
+
+## v0045 - 2026-11-21
+- Mirrored Base’s weekly reminder day boundary in standalone PocketBase, preventing prior weekdays and stale weekday metadata from producing alerts on another day. Uses the saved timezone across daylight-saving changes.

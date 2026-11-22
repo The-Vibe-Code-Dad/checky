@@ -144,4 +144,17 @@ function weeklyDay(tab, id) {
   const schedule = tab.weeklyChecklist
   return Array.isArray(schedule?.itemIds) ? schedule.itemIds.slice(0, 7).indexOf(id) : -1
 }
-module.exports = { latestOccurrence, nextOccurrence, skipsOccurrence, resetOccurrence, weeklyResetAt, weeklyDay }
+// Weekly rows describe a particular calendar day, not an overdue task queue.
+// End retries at local midnight even on 23/25-hour DST days, and reject stale
+// item recurrence metadata that points to a different row's weekday.
+function isWeeklyReminderDay(schedule, day, at, now) {
+  if (!Number.isFinite(at) || !Number.isFinite(now)) return false
+  try {
+    const zone = new Timezone(schedule.timeZone)
+    if (zone.string() !== schedule.timeZone) return false
+    const localDate = value => new DateTime(new Date(value).toISOString()).time().in(zone).format('2006-01-02')
+    const today = localDate(now)
+    return localDate(at) === today && new Date(today + 'T00:00:00Z').getUTCDay() === day
+  } catch (_) { return false }
+}
+module.exports = { latestOccurrence, nextOccurrence, skipsOccurrence, resetOccurrence, weeklyResetAt, weeklyDay, isWeeklyReminderDay }

@@ -99,6 +99,29 @@ async function checkWeekly(page, openTab, surface, hold, release) {
   await markDone();
   assert.equal(await rows.getByRole('checkbox', {name:'Monday'}).isChecked(), true);
   await page.evaluate(() => { state.settings.showDoneTab = true; });
+  // Two independent weekly lists must not reset at Saturday 7 pm (Sunday UTC).
+  await page.clock.setFixedTime(new Date('2026-11-21T22:00:00Z'));
+  await page.evaluate(value => {
+    state.data = value;
+    for (const [index, resetDay] of [[0, 0], [1, 1]]) {
+      const tab = state.data.tabs[index]; tab.items = [];
+      window.checkyWeekly.configure(tab, { resetDay, time: '18:30', timeZone: 'America/New_York', days: [0,1,2,3,4,5,6], followUpMinutes: 25 }, createEntityId, 1000);
+      for (const item of tab.items) window.checkyWeekly.setChecked(item, true);
+    }
+    render(); persistChecklistImmediately();
+  }, original);
+  for (const [now, counts] of [
+    ['2026-11-22T00:00:00Z', [7,7]],
+    ['2026-11-22T04:59:59Z', [7,7]],
+    ['2026-11-22T05:00:00Z', [0,7]],
+    ['2026-11-23T05:00:00Z', [0,0]]
+  ]) {
+    await page.clock.setFixedTime(new Date(now));
+    for (const index of [0,1]) {
+      await page.evaluate(index => { state.data.active = index; renderItems(); refreshRepeatingCheckboxes(); }, index);
+      assert.equal(await rows.locator('input:checked').count(), counts[index], surface + ' list ' + index + ' at ' + now);
+    }
+  }
   await page.evaluate(value => { state.ui.doneViewOpen=false; state.data=value; render(); persistChecklistImmediately(); }, original);
   await page.clock.setSystemTime(new Date());
   console.log('PASS ' + surface + ': weekday adoption, filtering, timestamped Done history, Sunday/Monday midnight reset, DST and reopen');

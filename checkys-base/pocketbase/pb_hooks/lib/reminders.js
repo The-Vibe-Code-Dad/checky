@@ -86,6 +86,7 @@ function dueReminder(tab, item, now, enabledAt) {
   if (weekday >= 0) {
     const schedule = tab.weeklyChecklist
     if (!Array.isArray(schedule.days) || !schedule.days.includes(weekday)) return null
+    if (!calendar.isWeeklyReminderDay(schedule, weekday, at, now)) return null
     if (now >= calendar.weeklyResetAt(schedule, at)) return null
     if (item.done && at < calendar.weeklyResetAt(schedule, checkedAt)) return null
   }

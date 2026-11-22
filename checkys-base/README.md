@@ -10,6 +10,8 @@ After sign-in, a desktop browser offers Checky Desktop once. The installer stays
 
 Use **Remind** on a task or **Edit week** on a weekly checklist to set **Repeat until checked (minutes)**. Leave it blank for one alert per occurrence. An offline check takes effect on the server when it syncs. Enable notifications separately on each device.
 
+Weekly checklist reminders belong to their weekday: follow-ups stop when that day is checked or ends in the saved timezone. Earlier weekdays do not keep alerting later in the week. Checkmarks clear together at midnight on the selected Sunday or Monday; the weekly reset does not send reminders itself.
+
 
 ## Current Stack
 
