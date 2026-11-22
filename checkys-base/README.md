@@ -395,13 +395,13 @@ bash scripts/publish-desktop-update.sh \
   "What changed in this release."
 ```
 
-Keep the private key outside the web tree, Docker build contexts, and Git. The publisher verifies it against the public key pinned in the desktop app before writing release files. This repository's private key is stored locally in `private-artifacts/update-signing/desktop-update-private.pem`; back it up securely. Losing it prevents signing updates trusted by installed desktops. Replacing the pinned public key requires distributing a new trusted desktop installer.
+Keep the private key outside the web tree, Docker build contexts, and Git. The publisher verifies it against the public key pinned in the desktop app before writing release files. Back up the signing key securely. Losing it prevents signing updates trusted by installed desktops. Replacing the pinned public key requires distributing a new trusted desktop installer.
 
 On Windows:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish-desktop-update.ps1 `
-  -InstallerPath "..\private-artifacts\checkys-list-1.1.0-x64.exe" `
+  -InstallerPath "C:\path\to\checkys-list-1.1.0-x64.exe" `
   -Version "1.1.0" `
   -ReleaseNotes "What changed in this release."
 ```

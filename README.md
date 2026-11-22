@@ -15,7 +15,6 @@ Checky Base is the primary product and canonical web source. The Rust desktop ap
 - `checkys-base/` - canonical web source, hosted app, PocketBase backend, and Docker Compose stack
 - `checkys-app/` - Rust desktop app
 - `pocketbase/` - PocketBase Dockerfile, hooks, and migrations
-- `private-artifacts/` - private build output folder for APKs, installers, ZIPs, and other release artifacts
 
 ## Checky Base Quick Start
 

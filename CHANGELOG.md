@@ -425,6 +425,9 @@ base:
 ## v0089 - 2026-11-21
 - Required Google's Modern Web Guidance skill in AGENTS.md for web and client-side changes, with its official source, guidance review, browser compatibility, verification, and external-drive storage requirements.
 
+## v0090 - 2026-11-21
+- Removed local agent instructions from the public repository and replaced machine-specific release paths in the READMEs with generic examples. Kept the local working instructions and existing ignore rules.
+
 desktop:
 
 ## v0001 - 2026-04-07
