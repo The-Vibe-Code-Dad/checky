@@ -34,6 +34,13 @@
     const weekday = new Date(day * DAY).getUTCDay();
     return day - (weekday - schedule.resetDay + 7) % 7;
   }
+  // Compare dates in the saved timezone and current reset week, not UTC days.
+  function isFutureDay(item, schedule, now = Date.now()) {
+    const day = schedule?.itemIds?.indexOf(item.id) ?? -1;
+    if (day < 0 || !schedule.days.includes(day)) return false;
+    const today = Math.floor(wallTime(now, schedule.timeZone) / DAY);
+    return weekStart(now, schedule) + (day - schedule.resetDay + 7) % 7 > today;
+  }
   function isChecked(item, schedule, now = Date.now()) {
     const checked = Date.parse(item.reminderCheckedAt || item.completedAt);
     return !!item.done && Number.isFinite(checked) && weekStart(checked, schedule) === weekStart(now, schedule);
@@ -289,7 +296,7 @@
     }
     return new Set(schedule.itemIds);
   }
-  const api = { notificationSlot, localReset, normalize, weekStart, isChecked, nextAnchor, configure, edit, renderRows, setChecked, archiveDay, archivedThisWeek };
+  const api = { notificationSlot, localReset, normalize, weekStart, isFutureDay, isChecked, nextAnchor, configure, edit, renderRows, setChecked, archiveDay, archivedThisWeek };
   if (typeof module !== 'undefined') module.exports = api;
   else window.checkyWeekly = api;
 })();

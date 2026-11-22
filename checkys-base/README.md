@@ -197,6 +197,8 @@ The optional Baby tracker saves log pages after loading them. Previously opened 
 
 ### Weekly checklist tabs
 
+Checking a future weekday in the current reset week opens **Skip this day’s reminder?**. Skip confirms the check and stops that day’s reminder and follow-ups until the weekly reset; Cancel or Escape leaves it unchecked. Past weekdays have no prompt. Today keeps its warning while its reminder is still ahead. Days follow the checklist’s saved timezone and Sunday/Monday reset choice.
+
 Hold or right-click a checklist tab and choose **Set up weekly checklist**. Pick Sunday or Monday as the reset day, select the weekdays to show, set the reminder time, and save. **Edit week** reopens this setup. Setup reuses existing weekday rows and keeps other tasks in the tab. Deselecting a day hides it and stops its reminders.
 
 Checking a day completes it for the current week. To keep a dated entry, enable **Settings > Show Done archive**, tap the three-line button beside the day and choose **Mark done**. At midnight on the reset day in the schedule's saved timezone, all selected days are available unchecked again, including after reopening offline. The dated entries stay in Done. Notifications use the existing per-browser opt-in.

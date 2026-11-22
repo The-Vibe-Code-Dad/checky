@@ -76,7 +76,9 @@ async function checkWeekly(page, openTab, surface, hold, release) {
   assert.ok((await page.locator('#list textarea').allTextContents()).length >= 2);
   // Undo on a prior week's history cannot clear a check from this week.
   await page.evaluate(() => { state.ui.doneViewOpen=false; renderItems(); });
-  await rows.getByRole('checkbox',{name:'Friday'}).check();
+  await rows.getByRole('checkbox',{name:'Friday'}).click();
+  await page.getByRole('dialog', { name: 'Skip this day’s reminder?', exact: true }).getByRole('button', { name: 'Skip this day’s reminder', exact: true }).click();
+  await page.locator('dialog.reminder-check-dialog').waitFor({ state: 'detached' });
   await page.evaluate(() => {
     const done = state.data.tabs[getDoneTabIndex()];
     undoDoneItem(done.items.findIndex(item => item.weeklySourceId === 'day-3'));

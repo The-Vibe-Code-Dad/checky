@@ -1744,7 +1744,8 @@ async function changeItemCheck(tabId, itemId, checked) {
   const weekly = !!schedule?.itemIds.includes(itemId);
   const weeklyIdentity = JSON.stringify(findTab().weeklyChecklist);
   let skipToday = false;
-  if (checked && reminder.hasReminderLaterToday(item, now)) {
+  if (checked && (reminder.hasReminderLaterToday(item, now) ||
+      (weekly && window.checkyWeekly.isFutureDay(item, schedule, now)))) {
     skipToday = await window.checkyConfirmEarlyCheck(item, { weekly });
     // Sync can replace a checklist while the dialog is open. Never apply an
     // answer to a different list, changed schedule or newer completion.

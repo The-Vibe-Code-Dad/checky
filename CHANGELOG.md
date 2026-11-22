@@ -459,6 +459,10 @@ base:
 - Fixed the early-reminder browser test race by waiting for actual dialog DOM removal after the native close event, instead of an accessible-role locator that stops matching as soon as the dialog is hidden. Kept all saved-choice, cancellation and stale-answer assertions for Base and desktop.
 - Passed the complete Base/desktop interaction suite with CI’s Chromium 156.0.8078.4. Reviewed native-dialog close-event guidance; application runtime code is unchanged.
 
+## v0096 - 2026-11-22
+- Confirm checking future weekly days, using the saved timezone and current Sunday/Monday reset week. Past days remain prompt-free and today keeps its existing early-reminder warning. Updated the weekly prompt to say “this day” and retained Cancel/Escape, saved skip choices and stale-answer protection.
+- Passed reminder unit tests and the complete Base/desktop interaction suite on Chromium 156, covering every future weekday, past-day checks, both reset days, DST, saved choices and independent lists. Retained the native dialog guidance and existing timezone-aware calendar helpers.
+
 desktop:
 
 ## v0001 - 2026-04-07
@@ -626,6 +630,9 @@ desktop:
 
 ## v0047 - 2026-11-22
 - Kept weekly early-check confirmation, cancellation and saved skip choices compatible with Base while preserving the weekly reset and next-week reminders.
+
+## v0048 - 2026-11-22
+- Matched Base’s future-weekday reminder confirmation and wording in the desktop companion, preserving past-day behavior and native dialog dismissal.
 
 pocketbase:
 

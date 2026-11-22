@@ -74,7 +74,7 @@ async function checkWeeklyEarlyReminders(page, surface) {
   });
   const untouched = await page.evaluate(() => JSON.stringify(state.data.tabs[1]));
   const checkbox = page.getByRole('checkbox', { name: 'Sunday', exact: true });
-  const dialog = page.getByRole('dialog', { name: 'Skip today’s reminder?', exact: true });
+  const dialog = page.getByRole('dialog', { name: 'Skip this day’s reminder?', exact: true });
   const current = () => page.evaluate(() => {
     const tab = state.data.tabs[0];
     return tab.items.find(item => item.id === tab.weeklyChecklist.itemIds[0]);
@@ -99,7 +99,7 @@ async function checkWeeklyEarlyReminders(page, surface) {
       'Cancelling must not persist the pending check');
   }
   await open();
-  await dialog.getByRole('button', { name: 'Skip today’s reminder', exact: true }).press('Enter');
+  await dialog.getByRole('button', { name: 'Skip this day’s reminder', exact: true }).press('Enter');
   await waitForPromptRemoval(page);
   assert.equal((await current()).done, true);
   assert.equal((await current()).reminderSkipToday, true);
@@ -115,18 +115,47 @@ async function checkWeeklyEarlyReminders(page, surface) {
   assert.equal((await current()).reminderSkipToday, false);
   await open();
   await page.evaluate(() => { state.data.tabs[0].weeklyChecklist.resetDay = 1; });
-  await dialog.getByRole('button', { name: 'Skip today’s reminder', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Skip this day’s reminder', exact: true }).click();
   await waitForPromptRemoval(page);
   assert.equal((await current()).done, false, 'A delayed answer cannot overwrite a changed weekly setup');
   await open();
   await page.clock.setFixedTime(new Date('2030-03-18T10:00:00Z'));
-  await dialog.getByRole('button', { name: 'Skip today’s reminder', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Skip this day’s reminder', exact: true }).click();
   await waitForPromptRemoval(page);
   assert.equal((await current()).done, false, 'A delayed answer cannot complete a day in a different week');
   await page.clock.setFixedTime(new Date('2030-03-10T10:00:00Z'));
   await page.evaluate(() => refreshRepeatingCheckboxes());
-  await page.getByRole('checkbox', { name: 'Monday', exact: true }).check();
-  assert.equal(await dialog.count(), 0, 'Other weekdays keep normal weekly check behavior');
+  await page.evaluate(() => { state.data.tabs[0].weeklyChecklist.resetDay = 0; renderItems(); });
+  for (const day of ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']) {
+    const box = page.getByRole('checkbox', { name: day, exact: true });
+    await box.tap();
+    await dialog.waitFor({ state: 'visible' });
+    assert.equal(await dialog.getByRole('button', { name: 'Cancel', exact: true }).evaluate(el => el === document.activeElement), true);
+    await page.keyboard.press('Escape');
+    await waitForPromptRemoval(page);
+    assert.equal(await box.isChecked(), false, day + ' cancellation stays unchecked');
+    await box.tap();
+    await dialog.getByRole('button', { name: 'Skip this day’s reminder', exact: true }).click();
+    await waitForPromptRemoval(page);
+    assert.equal(await box.isChecked(), true);
+    const saved = await page.evaluate(async () => (await (window.checkyStorage || window.checkyApi).loadState()).checklist);
+    assert.equal(saved.tabs[0].items.find(item => item.text === day).reminderSkipToday, true, day + ' choice is saved');
+    await box.uncheck();
+    assert.equal(await dialog.count(), 0, 'Unchecking never prompts');
+  }
+  await page.clock.setFixedTime(new Date('2030-03-13T10:00:00Z')); // Wednesday in the saved timezone.
+  for (const day of ['Sunday', 'Monday', 'Tuesday']) {
+    await page.getByRole('checkbox', { name: day, exact: true }).check();
+    assert.equal(await dialog.count(), 0, day + ' is past and must not prompt');
+  }
+  await page.evaluate(() => { state.data.tabs[0].weeklyChecklist.resetDay = 1; renderItems(); });
+  const sunday = page.getByRole('checkbox', { name: 'Sunday', exact: true });
+  await sunday.uncheck();
+  await sunday.tap();
+  await dialog.waitFor({ state: 'visible' });
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await waitForPromptRemoval(page);
+  assert.equal(await sunday.isChecked(), false, 'Sunday is future in a Monday-reset week');
   assert.equal(await page.evaluate(() => JSON.stringify(state.data.tabs[1])), untouched, 'The other weekly list is unchanged');
   console.log('PASS ' + surface + ': weekly early-check popup, Cancel/Escape, skip persistence, follow-ups, next week and stale setup');
 }

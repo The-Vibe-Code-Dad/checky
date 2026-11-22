@@ -168,3 +168,24 @@ test('desktop installer appears on first signed-in desktop visit and stays in Se
     assert.ok(page.element('desktopDownload').href.endsWith(suffix));
   }
 });
+
+
+test('future weekly days respect the saved timezone and Sunday/Monday reset boundary', () => {
+  for (const file of ['../web/weekly-checklist.js', '../../checkys-app/renderer/weekly-checklist.js']) {
+    const weekly = require(file);
+    const schedule = { resetDay: 0, days: [0,1,2,3,4,5,6], itemIds: ['sun','mon','tue','wed','thu','fri','sat'], timeZone: 'America/New_York' };
+    const future = (id, now, extra = {}) => weekly.isFutureDay({ id }, { ...schedule, ...extra }, Date.parse(now));
+    assert.equal(future('sun', '2030-03-13T10:00:00Z'), false);
+    assert.equal(future('mon', '2030-03-13T10:00:00Z'), false);
+    assert.equal(future('wed', '2030-03-13T10:00:00Z'), false);
+    assert.equal(future('thu', '2030-03-13T10:00:00Z'), true);
+    assert.equal(future('sun', '2030-03-13T10:00:00Z', { resetDay: 1 }), true);
+    assert.equal(future('mon', '2026-11-22T00:00:00Z'), false, 'Saturday evening locally: Monday is past');
+    assert.equal(future('sat', '2026-11-22T00:00:00Z'), false, 'UTC Sunday is still Saturday locally');
+    assert.equal(future('mon', '2026-11-22T05:00:00Z'), true, 'After Sunday reset Monday is future');
+    assert.equal(future('mon', '2026-11-22T05:00:00Z', { resetDay: 1 }), false);
+    assert.equal(future('sun', '2030-03-10T10:00:00Z'), false, 'DST Sunday is today');
+    assert.equal(future('mon', '2030-03-10T10:00:00Z'), true, 'Monday remains future over DST');
+    assert.equal(future('thu', '2030-03-13T10:00:00Z', { days: [0,1,2,3] }), false);
+  }
+});

@@ -4,17 +4,19 @@
     const dialog = document.createElement('dialog');
     dialog.className = 'reminder-check-dialog';
     const title = document.createElement('h2');
-    title.id = 'earlyReminderTitle-' + ++nextId; title.textContent = 'Skip today’s reminder?';
+    title.id = 'earlyReminderTitle-' + ++nextId; title.textContent = weekly ? 'Skip this day’s reminder?' : 'Skip today’s reminder?';
     const description = document.createElement('p');
-    description.textContent = (item.text || 'This item').slice(0, 200) + ' has a reminder later today. Skip it and keep this item checked until ' + (weekly ? 'the weekly reset?' : 'the following occurrence?');
+    description.textContent = (item.text || 'This item').slice(0, 200) + (weekly
+      ? ' has an upcoming reminder. Skip it and keep this day checked until the weekly reset?'
+      : ' has a reminder later today. Skip it and keep this item checked until the following occurrence?');
     const hint = document.createElement('p'); hint.className = 'hint';
-    hint.textContent = 'Future reminders will continue. This choice applies to everyone using this checklist.';
+    hint.textContent = (weekly ? 'Reminders resume next week.' : 'Future reminders will continue.') + ' This choice applies to everyone using this checklist.';
     const actions = document.createElement('form'); actions.method = 'dialog'; actions.className = 'inline';
     for (const [text, value, style] of [['Skip today’s reminder', 'skip', 'btn-primary'], ['Keep reminder', 'keep', 'btn-ghost'], ['Cancel', 'cancel', 'btn-ghost']]) {
       // Weekly completion already stops that day's reminders until the reset.
       if (weekly && value === 'keep') continue;
       const button = document.createElement('button'); button.type = 'submit'; button.className = 'btn ' + style;
-      button.textContent = text; button.value = value; button.autofocus = value === 'cancel'; actions.append(button);
+      button.textContent = weekly && value === 'skip' ? 'Skip this day’s reminder' : text; button.value = value; button.autofocus = value === 'cancel'; actions.append(button);
     }
     dialog.addEventListener('close', () => {
       const value = dialog.returnValue;
