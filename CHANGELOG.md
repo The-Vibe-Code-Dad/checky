@@ -440,6 +440,10 @@ base:
 - Used native dialog form actions with safe initial focus and browser-managed dismissal. Delayed answers cannot apply to a changed weekly setup or a different week.
 - Added touch and keyboard browser regressions, saved-choice checks, independent-list coverage and shared browser/backend schedule cases for cancellation, follow-ups and the next week.
 
+## v0094 - 2026-11-22
+- Fixed early-reminder browser tests to wait for native dialog closure before checking the saved answer. Installed-app tests now click to open confirmation without asserting a checkbox value before the user answers.
+- Passed the Base/desktop interaction and installed-web update/sync suites using the same Chromium version as CI.
+
 desktop:
 
 ## v0001 - 2026-04-07

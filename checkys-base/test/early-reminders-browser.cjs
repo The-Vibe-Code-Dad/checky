@@ -24,12 +24,14 @@ async function checkEarlyReminders(page, surface) {
   assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= viewport.width && bounds.y >= 0 && bounds.y + bounds.height <= viewport.height);
   if (process.env.CHECKY_SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.CHECKY_SCREENSHOT_DIR, `early-reminder-${surface}.png`) });
   await dialog.getByRole('button', { name: 'Skip today’s reminder', exact: true }).click();
+  await dialog.waitFor({ state: 'detached' });
   assert.equal((await current()).reminderSkipToday, true);
   assert.equal((await page.evaluate(async () => (await (window.checkyStorage || window.checkyApi).loadState()).checklist)).tabs[0].items[0].reminderSkipToday, true, 'Choice reaches storage');
   await checkbox.uncheck();
   assert.equal((await current()).reminderSkipToday, false);
   await openPrompt();
   await dialog.getByRole('button', { name: 'Keep reminder', exact: true }).click();
+  await dialog.waitFor({ state: 'detached' });
   assert.equal((await current()).done, true);
   assert.equal((await current()).reminderSkipToday, false);
   await checkbox.uncheck();
@@ -37,6 +39,7 @@ async function checkEarlyReminders(page, surface) {
     await openPrompt();
     if (cancel === 'Escape') await page.keyboard.press('Escape');
     else await dialog.getByRole('button', { name: cancel, exact: true }).click();
+    await dialog.waitFor({ state: 'detached' });
     assert.equal((await current()).done, false);
     assert.equal(await checkbox.isChecked(), false);
     assert.equal(await checkbox.evaluate(element => document.activeElement === element), true, 'Dismissal restores checkbox keyboard focus');
@@ -44,6 +47,7 @@ async function checkEarlyReminders(page, surface) {
   await openPrompt();
   await page.evaluate(() => { state.data.tabs[0].items[0].reminderAt = '2030-03-09T15:00:00Z'; });
   await dialog.getByRole('button', { name: 'Skip today’s reminder', exact: true }).click();
+  await dialog.waitFor({ state: 'detached' });
   assert.equal((await current()).done, false, 'A delayed answer cannot overwrite a changed schedule');
   await page.evaluate(() => { state.data.tabs[0].items[0].reminderRepeat = 'none'; renderItems(); });
   await checkbox.check();

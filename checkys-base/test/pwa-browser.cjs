@@ -127,7 +127,7 @@ async function main() {
         reminderTimeZone: new Date().getUTCHours() === 23 ? 'America/New_York' : 'UTC', reminderDays: null });
       renderItems();
     });
-    await page.locator('#list input[type="checkbox"]').check();
+    await page.locator('#list input[type="checkbox"]').click();
     await page.getByRole('button', { name: 'Skip today’s reminder', exact: true }).click();
     await page.waitForFunction(() => {
       const item = state.data.tabs[state.data.active].items[0];
@@ -147,7 +147,7 @@ async function main() {
       Object.assign(item, {reminderAt:new Date(Date.now()+4000).toISOString(), reminderRepeat:'daily', reminderTimeZone:'UTC', reminderDays:null});
       renderItems();
     });
-    await page.locator('#list input[type="checkbox"]').check();
+    await page.locator('#list input[type="checkbox"]').click();
     await page.getByRole('button', { name: 'Keep reminder', exact: true }).click();
     await page.waitForFunction(() => !!state.data.tabs[state.data.active].items[0].reminderResetAt);
     await page.waitForFunction(() => !document.querySelector('#list input[type="checkbox"]').checked);
