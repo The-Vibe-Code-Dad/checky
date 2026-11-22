@@ -1,15 +1,15 @@
 {
   "repository": "The-Vibe-Code-Dad/checky",
-  "tag": "desktop-v2.0.0",
-  "version": "2.0.0",
+  "tag": "desktop-v2.0.1",
+  "version": "2.0.1",
   "signedManifest": {
     "schemaVersion": 2,
-    "version": "2.0.0",
-    "publishedAt": "2026-11-16T13:48:10.035Z",
-    "fileName": "checkys-list-2.0.0-x64.exe",
-    "downloadUrl": "/desktop-updates/checkys-list-2.0.0-x64.exe",
-    "sha256": "92ace84013dd7c9b9f9f41381f21d6356357ab848fc13c7f108f11fe96ea0f2f",
-    "releaseNotes": "Checky Desktop now uses the hosted web app with a native shortcut, tray and repeat reminders.",
-    "signature": "RRO63vnH9CcLOPlYLbIx16PiahAIxCdIls+12enJC274K634iAMvTT0I6xwJN+b1nB97s1BFVXcJn4BtGyzpAQ=="
+    "version": "2.0.1",
+    "publishedAt": "2026-11-22T03:53:27.375Z",
+    "fileName": "checkys-list-2.0.1-x64.exe",
+    "downloadUrl": "/desktop-updates/checkys-list-2.0.1-x64.exe",
+    "sha256": "b000bbab0549072f1b221871c4c79ee03a3ac39efbff2024328c92b8f9c81b5b",
+    "releaseNotes": "No preset hosted server. Choose your own server or a local checklist on first launch.",
+    "signature": "KuG3iZ6/hudxamS9+ASWu+wFTCY9oDapL8nY/9RPi4lQsZLBa19xJqRV3mwJWh0M4WoRKycL8oq+Bo0UDriEAA=="
   }
 }

@@ -431,6 +431,10 @@ base:
 ## v0091 - 2026-11-21
 - Standardized public server examples and matching test fixtures on example.domain.
 
+## v0092 - 2026-11-21
+- Removed local-only agent instruction files and personal deployment references from public branch and tag history.
+- Updated the signed hosted desktop download to the verified 2.0.1 Windows installer.
+
 desktop:
 
 ## v0001 - 2026-04-07
@@ -591,6 +595,10 @@ desktop:
 ## v0045 - 2026-11-21
 - Removed the personal hosted address from desktop defaults and test fixtures. Fresh installations require an explicit server address or local mode; local mode no longer requires a server URL.
 - Prepared desktop 2.0.1 with regression coverage for empty hosted settings and local workspace selection. Server examples use example.domain and agent instruction files are ignored regardless of capitalization.
+
+## v0046 - 2026-11-21
+- Published desktop 2.0.1 for Windows, macOS and Linux after platform tests and installer verification. Added the signed Windows update manifest.
+- Retired the superseded 2.0.0 public release containing the former personal server default.
 
 pocketbase:
 
