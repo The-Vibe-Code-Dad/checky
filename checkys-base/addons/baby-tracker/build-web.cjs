@@ -11,6 +11,8 @@ async function buildAddon(directory) {
   if (!source.includes('__CHECKY_BUILD__')) throw Error('Build an unstamped copy of the add-on web directory.');
   const version = hash.digest('hex').slice(0, 24);
   await fs.writeFile(html, source.replaceAll('__CHECKY_BUILD__', version));
+  const worker = path.join(directory, 'service-worker.js');
+  await fs.writeFile(worker, (await fs.readFile(worker, 'utf8')).replaceAll('__CHECKY_BUILD__', version));
   return version;
 }
 module.exports = { buildAddon };

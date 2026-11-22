@@ -396,12 +396,41 @@ function ensureNavigationPreferences() {
     ).slice(0, 200) : [],
     alwaysVisibleAddonLists: Array.isArray(saved?.alwaysVisibleAddonLists) ? saved.alwaysVisibleAddonLists.filter(pin =>
       pin && typeof pin.addonId === "string" && typeof pin.ref === "string"
-    ).slice(0, 200) : []
+    ).slice(0, 200) : [],
+    lastAddon: typeof saved?.lastAddon?.addonId === "string" && typeof saved?.lastAddon?.ref === "string"
+      ? { addonId: saved.lastAddon.addonId, ref: saved.lastAddon.ref } : null,
+    lastTabs: Array.isArray(saved?.lastTabs) ? saved.lastTabs.filter(item =>
+      item && typeof item.checklistId === "string" && typeof item.tabId === "string"
+    ).slice(-200) : []
   };
 }
 
 function saveNavigationPreferences() {
   try { localStorage.setItem(state.ui.navigationScope, JSON.stringify(state.ui.navigationPreferences)); } catch {}
+}
+
+function navigationChecklistId() {
+  return state.currentChecklistId || (!isHostedWebRuntime() ? "local" : "");
+}
+
+function rememberChecklistTab() {
+  const checklistId = navigationChecklistId();
+  const tab = state.data.tabs[state.data.active];
+  if (!checklistId || isSpecialViewOpen() || !tab || isDoneTab(tab)) return;
+  ensureNavigationPreferences();
+  const tabs = state.ui.navigationPreferences.lastTabs;
+  if (tabs.find(item => item.checklistId === checklistId)?.tabId === tab.id) return;
+  state.ui.navigationPreferences.lastTabs = [...tabs.filter(item => item.checklistId !== checklistId),
+    { checklistId, tabId: tab.id }].slice(-200);
+  saveNavigationPreferences();
+}
+
+function restoreChecklistTab() {
+  ensureNavigationPreferences();
+  const saved = state.ui.navigationPreferences.lastTabs.find(item => item.checklistId === navigationChecklistId());
+  const index = state.data.tabs.findIndex(tab => tab.id === saved?.tabId && !isDoneTab(tab));
+  state.ui.lastChecklistTabIndex = getSafeChecklistTabIndex(index < 0 ? state.data.active : index);
+  if (!state.ui.doneViewOpen) state.data.active = state.ui.lastChecklistTabIndex;
 }
 
 function isTabAlwaysVisible(tabId) {
@@ -438,8 +467,8 @@ function addAlwaysShowOption(container, tab, input) {
 }
 
 async function openAlwaysVisibleTab(pin) {
-  if (!leaveInstalledAddon()) return;
   if (state.ui.syncInProgress || state.ui.availableChecklistsLoading) return;
+  if (!leaveInstalledAddon()) return;
   if (pin.checklistId !== (state.currentChecklistId || "local")) {
     if (!await useSelectedChecklist(pin.checklistId)) return;
   }
@@ -694,6 +723,7 @@ async function persistChecklistSnapshot(snapshot, requestId, { updateStatus = tr
 }
 
 function persistChecklistImmediately() {
+  rememberChecklistTab();
   clearPendingSave();
   const requestId = ++lastChecklistSaveRequestId;
   const snapshot = createChecklistSnapshot();
@@ -716,6 +746,7 @@ async function flushPendingSave() {
 }
 
 function debounceSaveChecklist() {
+  rememberChecklistTab();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
     saveTimer = null;
@@ -814,7 +845,8 @@ async function useSelectedChecklist(selectedChecklistId) {
   if (state.ui.syncInProgress || state.ui.availableChecklistsLoading || !selectedChecklistId) return;
   if (!leaveInstalledAddon()) return false;
   if (selectedChecklistId === state.currentChecklistId) {
-    state.ui.settingsViewOpen = false; state.ui.doneViewOpen = false; closeDrawer(); render(); return true;
+    state.ui.settingsViewOpen = false; state.ui.doneViewOpen = false;
+    restoreChecklistTab(); rememberChecklistTab(); closeDrawer(); render(); return true;
   }
 
   state.ui.syncInProgress = true;
@@ -835,6 +867,7 @@ async function useSelectedChecklist(selectedChecklistId) {
     state.ui.itemDeleteConfirmIndex = null;
     closeItemContextMenu();
     applyChecklistSwitchResult(result);
+    rememberChecklistTab();
     state.ui.lastChecklistTabIndex = state.data.active;
     switched = true;
     setStatus(result.message || "Checklist opened.");
@@ -850,6 +883,7 @@ async function useSelectedChecklist(selectedChecklistId) {
       els.checklistFolders.querySelector('[data-folder="' + key + '"] > summary')?.focus();
     }
   }
+  if (switched && navigator.onLine) void runManualSync('switch');
   return switched;
 }
 
@@ -872,6 +906,7 @@ function applyChecklistSwitchResult(result) {
   state.assignedChecklistId = typeof result?.assignedChecklistId === "string" ? result.assignedChecklistId : state.assignedChecklistId;
   state.currentChecklistId = typeof result?.currentChecklistId === "string" ? result.currentChecklistId : state.currentChecklistId;
   state.ui.availableChecklistsMessage = "";
+  restoreChecklistTab();
   render();
 }
 
@@ -1035,6 +1070,8 @@ async function syncChecklist(source) {
     if (result?.syncRestorePoint) {
       state.syncRestorePoint = normalizeSyncRestorePointInfo(result.syncRestorePoint);
     }
+    if (typeof result?.currentChecklistId === "string") state.currentChecklistId = result.currentChecklistId;
+    restoreChecklistTab();
     render();
     if (result?.ok) {
       await loadAvailableChecklists();
@@ -1058,6 +1095,7 @@ async function syncChecklist(source) {
     state.ui.syncInProgress = false;
     setSyncControlsBusy(false);
     renderSettings();
+    restoreInstalledAddon();
     if (source !== "pull" && !pullSyncFeedbackTimer) {
       resetPullSyncIndicator();
     }
@@ -1550,13 +1588,17 @@ function isItemDeleteConfirmPending(tabIndex, itemIndex) {
   return state.ui.itemDeleteConfirmIndex?.tabIndex === tabIndex && state.ui.itemDeleteConfirmIndex?.itemIndex === itemIndex;
 }
 
-let installedAddons = [], activeAddon = null, addonLoadGeneration = 0;
+let installedAddons = [], activeAddon = null, addonLoadGeneration = 0, addonOpenGeneration = 0;
 async function loadInstalledAddons() {
   const generation = ++addonLoadGeneration;
   const account = state.hostedSession.user.id;
-  if (!state.hostedSession.authenticated) { installedAddons = []; renderInstalledAddons(); return; }
+  const cache = window.checkyOfflineCache;
+  const saved = cache?.read(account, 'addons') || [];
+  if (!state.hostedSession.authenticated && !state.hostedSession.offline) { installedAddons = []; renderInstalledAddons(); return; }
   try {
+    if (state.hostedSession.offline || navigator.onLine === false) throw Error('Offline');
     const response = await fetch('./addons.json', { cache: 'no-store', credentials: 'same-origin', signal: AbortSignal.timeout(10000) });
+    if (response.status >= 500 || response.status === 408 || response.status === 429) throw Error('Unavailable');
     const manifest = response.ok ? await response.json() : [];
     const candidates = Array.isArray(manifest) ? manifest.slice(0, 16) : [];
     const endpoint = value => typeof value === 'string' && /^\/api\/checkys-base\/[a-z0-9/-]+$/.test(value);
@@ -1566,33 +1608,63 @@ async function loadInstalledAddons() {
       try {
         const options = { cache: 'no-store', credentials: 'same-origin', signal: AbortSignal.timeout(10000) };
         const check = await fetch(addon.probe, options);
+        if (check.status >= 500 || check.status === 408 || check.status === 429) throw Error('Unavailable');
         if (!check.ok || (await check.json()).installed !== true) return null;
         let data = { items: [] };
         if (addon.lists) {
           const result = await fetch(addon.lists, options);
+          if (result.status >= 500 || result.status === 408 || result.status === 429) throw Error('Unavailable');
           if (!result.ok) return null;
           data = await result.json();
         }
         return { ...addon, items: Array.isArray(data.items) ? data.items.filter(item =>
           item && /^[a-z_]+:[a-z0-9]{15}$/.test(item.ref) && typeof item.name === 'string') : [] };
-      } catch (_) { return null; }
+      } catch (_) { return saved.find(item => item.id === addon.id) || null; }
     }));
     if (generation !== addonLoadGeneration || state.hostedSession.user.id !== account) return;
     installedAddons = available.filter(Boolean);
-  } catch (_) { return; }
+    const baby = installedAddons.find(addon => addon.id === 'baby-tracker');
+    for (const item of saved.find(addon => addon.id === 'baby-tracker')?.items || []) {
+      if (!baby?.items.some(current => current.ref === item.ref)) cache?.remove(account, 'baby-log:' + item.ref);
+    }
+    try { cache?.write(account, 'baby-lists', baby?.items || []); } catch (_) {}
+    try { cache?.write(account, 'addons', installedAddons); } catch (_) {}
+    // Baby owns its shell cache independently from the Base app build. Install
+    // it as soon as an assigned log is discovered, before the first offline visit.
+    if (installedAddons.some(addon => addon.id === 'baby-tracker') && 'serviceWorker' in navigator) {
+      void navigator.serviceWorker.register('/baby/service-worker.js', { scope: '/baby/' }).catch(() => {});
+    }
+  } catch (_) {
+    if (generation !== addonLoadGeneration || state.hostedSession.user.id !== account) return;
+    installedAddons = saved;
+  }
   renderInstalledAddons();
+  restoreInstalledAddon();
+}
+function restoreInstalledAddon() {
+  // Discovery can finish while startup/reconnect sync has disabled navigation.
+  // Keep the selected view and retry as soon as that sync releases the controls.
+  if (state.ui.syncInProgress || (!state.hostedSession.authenticated && !state.hostedSession.offline)) return;
   if (!activeAddon) {
     const params = new URLSearchParams(location.search);
-    const addon = installedAddons.find(item => item.id === params.get('addon'));
-    const item = addon?.items.find(item => item.ref === params.get('list'));
+    // Notification/deep links take precedence over this device's saved view.
+    if (params.has('reminder')) return;
+    ensureNavigationPreferences();
+    const saved = state.ui.navigationPreferences.lastAddon;
+    const target = params.has('addon') ? { addonId: params.get('addon'), ref: params.get('list') } : saved;
+    const addon = installedAddons.find(item => item.id === target?.addonId);
+    const item = addon?.items.find(item => item.ref === target?.ref);
     if (addon && item) void openInstalledAddon(addon, item);
   }
 }
 function leaveInstalledAddon() {
-  if (!activeAddon) return true;
-  if (els.addonFrame.contentWindow?.checkyCanLeave && !els.addonFrame.contentWindow.checkyCanLeave()) return false;
+  if (activeAddon && els.addonFrame.contentWindow?.checkyCanLeave && !els.addonFrame.contentWindow.checkyCanLeave()) return false;
+  addonOpenGeneration++;
+  ensureNavigationPreferences();
+  state.ui.navigationPreferences.lastAddon = null;
+  saveNavigationPreferences();
+  if (activeAddon) els.addonFrame.src = 'about:blank';
   activeAddon = null;
-  els.addonFrame.src = 'about:blank';
   const url = new URL(location.href);
   for (const key of ['addon', 'list', 'manage']) url.searchParams.delete(key);
   history.replaceState(null, '', url);
@@ -1600,9 +1672,14 @@ function leaveInstalledAddon() {
 }
 async function openInstalledAddon(addon, item) {
   if (state.ui.syncInProgress || !leaveInstalledAddon()) return;
+  const generation = addonOpenGeneration;
   if (!await flushPendingSave()) { setStatus('Could not save your checklist. Try again before opening the list.', true); render(); return; }
+  if (generation !== addonOpenGeneration) return;
+  rememberChecklistTab();
   rememberCurrentChecklistTab();
   activeAddon = { id: addon.id, ref: item.ref };
+  state.ui.navigationPreferences.lastAddon = { addonId: addon.id, ref: item.ref };
+  saveNavigationPreferences();
   state.ui.settingsViewOpen = false; state.ui.doneViewOpen = false;
   const url = new URL(addon.href, location.origin);
   url.searchParams.set('embedded', '1');
@@ -1911,6 +1988,8 @@ function renderTabs() {
       if (event.target.closest("input, button:not(.tab-label)")) {
         return;
       }
+      // A tab chosen while add-on discovery is pending wins over the saved Baby view.
+      if (!leaveInstalledAddon()) return;
       state.ui.doneViewOpen = false;
       state.ui.settingsViewOpen = false;
       state.data.active = index;
@@ -2820,6 +2899,7 @@ async function init() {
   state.data = normalizeData(loaded.checklist);
   state.settings = normalizeSettings(loaded.settings);
   state.hostedSession = normalizeHostedSession(loaded.hostedSession);
+  state.currentChecklistId = loaded.currentChecklistId || "";
   if (isHostedWebRuntime() && !normalizeSettings(state.settings).advanced.serverUrl) {
     state.settings = normalizeSettings({
       ...state.settings,
@@ -2837,10 +2917,13 @@ async function init() {
     : false;
   if (state.hostedSession.offline) {
     state.currentChecklistId = state.hostedSession.recordId;
+    await loadAvailableChecklists();
     setStatus("Offline. Showing the checklist saved on this device.");
   } else if (state.hostedSession.unavailable) {
     setLoginStatus("Connect to Checky to sign in on this device.");
   }
+  restoreChecklistTab();
+  rememberChecklistTab();
   render();
   window.checkyHostedShellReady?.(state.hostedSession);
   window.checkyDesktopReady?.(state.hostedSession);
@@ -2860,12 +2943,18 @@ async function init() {
       if (checklistId && state.availableChecklists.some(item => item.id === checklistId)) {
         if (state.currentChecklistId !== checklistId) await useSelectedChecklist(checklistId);
         if (state.currentChecklistId === checklistId) {
+          if (!leaveInstalledAddon()) return;
           const index = state.data.tabs.findIndex(tab => tab.name === params.get('tab'));
           if (index >= 0) state.data.active = index;
-          state.ui.settingsViewOpen = false;
+          state.ui.settingsViewOpen = false; state.ui.doneViewOpen = false;
+          state.ui.lastChecklistTabIndex = getSafeChecklistTabIndex(state.data.active);
+          rememberChecklistTab();
           render();
         }
-        history.replaceState(null, '', location.pathname);
+        const address = new URL(location.href);
+        address.searchParams.delete('reminder');
+        address.searchParams.delete('tab');
+        history.replaceState(null, '', address);
       }
     }, 500);
   }
@@ -2884,7 +2973,8 @@ async function init() {
   }
   window.addEventListener("storage", event => {
     if (state.ui.loginOverlayOpen) return;
-    if (event.key === null || (event.key === "checky.base.offlineLocked" && event.newValue === "1")) {
+    if (event.key === null || (event.key === "checky.base.offlineLocked" && event.newValue === "1") ||
+        (event.key === 'checky.base.cachedAccount' && event.newValue !== state.hostedSession.user.id)) {
       window.location.reload();
     }
   });

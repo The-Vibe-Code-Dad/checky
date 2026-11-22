@@ -13,7 +13,7 @@ const password = 'Disposable-PWA-Only-20261104!';
 async function main() {
   if (!process.env.CHECKY_POCKETBASE_BINARY) throw Error('Set CHECKY_POCKETBASE_BINARY to a disposable test binary.');
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'checky-pwa-'));
-  let child, browser, server, log = '', activeBuild = 0, failAsset = false, staleNavigation = false;
+  let child, browser, server, debugPage, log = '', activeBuild = 0, failAsset = false, staleNavigation = false;
   let stallSession = false;
   const builds = [], versions = [];
   try {
@@ -66,22 +66,26 @@ async function main() {
     // Keep permission granted here to test opt-in persistence, not push providers.
     await context.addInitScript(() => Object.defineProperty(Notification, 'permission', { get: () => 'granted' }));
     const page = await context.newPage(), errors = [];
+    debugPage = page;
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(origin);
     await page.locator('#loginEmailInput').fill('admin@pwa.invalid');
     await page.locator('#loginPasswordInput').fill(password);
     await page.locator('#loginSubmitBtn').click();
-    await page.locator('#loginOverlay').waitFor({ state: 'hidden' });
-    await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
+    await page.locator('#loginOverlay').waitFor({ state: 'hidden' }).catch(async error => {
+      console.error('Login status:', await page.locator('#loginOverlay').innerText(), 'Page errors:', errors); throw error;
+    });
+    await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !!state.ui.lastSyncedAt && !state.ui.syncInProgress);
     await page.waitForFunction(() => !!navigator.serviceWorker.controller);
     await page.locator('#navToggle').click();
     await page.locator('#settingsToggle').click();
     const openSettings = page.getByRole('button', { name: 'Notification settings', exact: true });
     const dialog = page.getByRole('dialog', { name: 'Notification settings' });
     await page.evaluate(() => {
-      // This browser has no Android Settings handler. Let the real tap run.
+      // Record the Android handoff without launching a desktop protocol handler.
       window.systemSettingsHandoffs = [];
       document.getElementById('systemNotificationSettings').addEventListener('click', event => {
+        event.preventDefault();
         window.systemSettingsHandoffs.push(event.currentTarget.href);
       });
     });
@@ -134,7 +138,7 @@ async function main() {
       return item.reminderSkipToday && Date.parse(item.reminderResetAt) > Date.parse(item.reminderAt);
     });
     await page.reload();
-    await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
+    await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !!state.ui.lastSyncedAt && !state.ui.syncInProgress);
     assert.equal(await page.locator('#list input[type="checkbox"]').isChecked(), true);
     assert.equal(await page.evaluate(() => {
       const item = state.data.tabs[state.data.active].items[0];
@@ -164,7 +168,7 @@ async function main() {
     });
     console.log('PASS repeating checkbox acknowledgement, live automatic reset and permanent Mark done without an archive');
     const other = await context.newPage(); await other.goto(origin);
-    await other.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
+    await other.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !!state.ui.lastSyncedAt && !state.ui.syncInProgress);
     await other.locator('#list textarea').evaluate(el => { el.value = 'Other window draft'; });
     await page.bringToFront();
     let navigations = 0;
@@ -195,7 +199,7 @@ async function main() {
     await page.locator('#appUpdateApply').tap();
     await page.waitForFunction(version => document.querySelector('script[src*="pwa.js"]')?.src.includes(version), versions[1]);
     staleNavigation = false;
-    await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
+    await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !!state.ui.lastSyncedAt && !state.ui.syncInProgress);
     assert.equal(await page.locator('#list textarea').inputValue(), 'Last edit before updating');
     assert.equal(await page.locator('#loginOverlay').isVisible(), false);
     assert.equal(await page.locator('#appUpdateBanner').isVisible(), false);
@@ -247,11 +251,14 @@ async function main() {
 
     // Return online on the existing build, then recover the failed deployment.
     activeBuild = 1; failAsset = false; await context.setOffline(false); await page.goto(origin);
-    await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
+    await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !!state.ui.lastSyncedAt && !state.ui.syncInProgress);
     activeBuild = 2;
     await page.locator('#navToggle').click(); await page.locator('#settingsToggle').click();
     await page.locator('#appUpdateCheck').click();
-    await page.locator('#appUpdateBanner').waitFor({ state: 'visible' });
+    await page.locator('#appUpdateBanner').waitFor({ state: 'visible' }).catch(async error => {
+      console.error('Update recovery:', await page.evaluate(() => ({ status: document.getElementById('appUpdateStatus').textContent,
+        script: document.querySelector('script[src*="pwa.js"]').src }))); throw error;
+    });
     // Hold a real sync open as it would be on a slow mobile connection.
     await page.evaluate(() => {
       const sync = window.checkyStorage.syncNow;
@@ -267,7 +274,7 @@ async function main() {
     assert.ok((await page.locator('script[src*="pwa.js"]').getAttribute('src')).includes(versions[1]));
     await page.evaluate(() => window.finishSlowSync());
     await page.waitForFunction(version => document.querySelector('script[src*="pwa.js"]')?.src.includes(version), versions[2]);
-    await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
+    await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !!state.ui.lastSyncedAt && !state.ui.syncInProgress);
     assert.equal(await page.locator('#appUpdateBanner').isVisible(), false);
     assert.deepEqual(errors, []);
     console.log('PASS one tap during a real sync applies the downloaded update, including recovery after a failed deployment');
@@ -293,6 +300,7 @@ async function main() {
     await page.locator('#loginSubmitBtn').click();
     await page.waitForFunction(() => typeof state !== 'undefined' && !!state.ui.lastSyncedAt && !state.ui.syncInProgress);
     assert.equal(await page.locator('#list textarea').first().inputValue(), draft);
+    const previousNavigation = await page.evaluate(() => ({ scope: state.ui.navigationScope, checklistId: state.currentChecklistId }));
     await page.evaluate(() => document.getElementById('checkysBaseHostedLogoutBtn').click());
     await page.locator('#loginEmailInput').waitFor({state:'visible'});
     await context.setOffline(true);
@@ -315,6 +323,9 @@ async function main() {
     await page.locator('#loginPasswordInput').fill(password);
     await page.locator('#loginSubmitBtn').click();
     await page.waitForFunction(id => typeof state !== 'undefined' && state.hostedSession.user.id === id && !!state.ui.lastSyncedAt, secondId);
+    assert.notEqual(await page.evaluate(() => state.ui.navigationScope), previousNavigation.scope);
+    assert.equal(await page.evaluate(id => state.ui.navigationPreferences.lastTabs.some(item => item.checklistId === id), previousNavigation.checklistId), false,
+      'The second account must not inherit the first account\'s remembered tabs');
     await context.setOffline(true);
     await page.reload();
     await page.waitForFunction(id => typeof state !== 'undefined' && state.hostedSession.offline && state.hostedSession.user.id === id, secondId);
@@ -326,7 +337,16 @@ async function main() {
     console.log('PASS offline access respects sign-out, expired sessions, account switching and first use; signing back in restores the same user’s draft');
 
     assert.deepEqual(errors, []);
-  } catch (error) { console.error(log); throw error; }
+  } catch (error) {
+    if (debugPage && !debugPage.isClosed()) console.error('Browser failure:', await debugPage.evaluate(() => ({
+      notice: document.getElementById('appUpdateNotice')?.textContent,
+      status: document.getElementById('appUpdateStatus')?.textContent,
+      dialogs: Array.from(document.querySelectorAll('dialog[open]'), dialog => dialog.id),
+      authenticated: typeof state !== 'undefined' && state.hostedSession.authenticated,
+      syncing: typeof state !== 'undefined' && state.ui.syncInProgress
+    })).catch(() => null));
+    console.error(log); throw error;
+  }
   finally {
     await browser?.close();
     if (server) await new Promise(resolve => server.close(resolve));

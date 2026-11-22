@@ -2,11 +2,12 @@
   const $ = id => document.getElementById(id);
   const apiRoot = '/api/checkys-base/baby';
   const amounts = window.checkyBabyAmounts;
+  const cache = window.checkyOfflineCache;
   const params = new URLSearchParams(location.search);
   const embedded = window.parent !== window && params.get('embedded') === '1';
   document.body.classList.toggle('embedded', embedded);
   const notifyLists = () => { if (embedded) parent.postMessage({ type: 'checky-addon-lists-changed' }, location.origin); };
-  let user, lists = [], entries = [], current = '', more = false, loading = false, saving = false;
+  let user, lists = [], entries = [], current = '', more = false, loading = false, saving = false, offline = false;
   let renderedDay, pagesLoaded = 1;
   let editing = null, requestId = '', dirty = false, canonical = {}, unit = 'ml', editorUnit = 'ml';
   function status(message, error = false) { $('status').textContent = message; $('status').classList.toggle('error', error); }
@@ -14,7 +15,7 @@
     let response;
     try {
       response = await fetch(path, { method, credentials: 'same-origin', cache: 'no-store',
-        headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+        signal: AbortSignal.timeout(method === 'GET' ? 10000 : 30000), headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
     } catch (_) { throw Error('Cannot reach Checky Base. Check your connection and try again.'); }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -27,17 +28,22 @@
   function fail(error) {
     status(error.message, true);
     if (error.status === 401 || error.status === 403 || error.status === 404) {
+      if (user && current) cache.remove(user.id, 'baby-log:' + current);
+      if (user) {
+        lists = lists.filter(list => list.ref !== current);
+        try { cache.write(user.id, 'baby-lists', lists); } catch (_) {}
+      }
       entries = []; renderedDay = undefined; pagesLoaded = 1;
       $('entries').replaceChildren(); $('tracker').hidden = true; notifyLists();
-      if (error.status === 401) { user = null; $('login').hidden = false; }
+      if (error.status === 401) { cache.session({ authenticated: false }); user = null; $('login').hidden = false; }
     }
   }
   const preferenceKey = () => 'checky-baby-unit:' + user.id;
   function activeList() { return lists.find(list => list.ref === current); }
   function controls() {
-    $('addEntry').disabled = loading || !activeList()?.writable;
+    $('addEntry').disabled = loading || offline || !activeList()?.writable;
     $('listPicker').disabled = loading;
-    $('loadMore').disabled = loading;
+    $('loadMore').disabled = loading || offline;
   }
   function node(tag, className, text) {
     const element = document.createElement(tag);
@@ -53,7 +59,7 @@
     time.dateTime = data.occurredAt;
     const timestamp = date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
     time.title = timestamp;
-    const edit = node('button', '', 'Edit'); edit.type = 'button'; edit.disabled = !activeList()?.writable;
+    const edit = node('button', '', 'Edit'); edit.type = 'button'; edit.disabled = offline || !activeList()?.writable;
     edit.setAttribute('aria-label', 'Edit entry from ' + timestamp);
     edit.onclick = () => openEditor(record);
     heading.append(time, edit); card.append(heading);
@@ -126,30 +132,67 @@
         pages++;
         hasMore = result.more;
       } while (!append && hasMore && pages < pagesLoaded);
-      const changed = more !== hasMore || renderedDay !== localDay(Date.now()) || entries.length !== next.length ||
+      const changed = offline || more !== hasMore || renderedDay !== localDay(Date.now()) || entries.length !== next.length ||
         next.some((item, i) => entries[i].id !== item.id || entries[i].version !== item.version);
-      entries = next; pagesLoaded = pages; more = hasMore;
+      entries = next; pagesLoaded = pages; more = hasMore; offline = false;
       if (changed) render();
-      status('');
+      try { saveLog(); status(''); }
+      catch (_) { status('Log loaded. This device has no space to save an offline copy.', true); }
+    } catch (error) {
+      if (!cache.unavailable(error)) throw error;
+      if (!restoreLog()) throw error;
     } finally { loading = false; controls(); }
   }
+  function saveLog() { cache.write(user.id, 'baby-log:' + current, { entries, more, pagesLoaded }); }
+  function restoreLog() {
+    const saved = cache.read(user?.id, 'baby-log:' + current);
+    if (!saved || !activeList()) return false;
+    entries = saved.entries; more = saved.more; pagesLoaded = saved.pagesLoaded;
+    offline = true; render(); controls();
+    status('Offline. Showing saved entries. Connect to add or edit entries or load earlier history.');
+    return true;
+  }
   async function start() {
-    const session = await api('/api/checkys-base/session');
-    if (!session.authenticated) {
-      $('login').hidden = false; $('tracker').hidden = true;
-      status(session.setupRequired ? 'Set up Checky Base from the main app first.' : 'Sign in to open your log.'); return;
+    try {
+      const session = await api('/api/checkys-base/session');
+      if (typeof session.authenticated !== 'boolean') throw Error('Cannot reach Checky Base.');
+      cache.session(session);
+      if (!session.authenticated) {
+        $('login').hidden = false; $('tracker').hidden = true;
+        status(session.setupRequired ? 'Set up Checky Base from the main app first.' : 'Sign in to open your log.'); return;
+      }
+      user = session.user;
+      await refreshLists();
+      offline = false;
+    } catch (error) {
+      if (!cache.unavailable(error)) throw error;
+      const id = cache.account(), saved = cache.read(id, 'baby-lists');
+      if (!saved) throw Error('Connect to Checky to open this baby log on this device for the first time.');
+      user = { id }; lists = saved; offline = true; renderLists();
     }
-    user = session.user; $('login').hidden = true;
-    await refreshLists();
+    $('login').hidden = true;
     const requested = params.get('list');
-    current = lists.some(list => list.ref === requested) ? requested : requested ? '' : lists[0]?.ref || '';
+    const remembered = cache.read(user.id, 'baby-last-list');
+    current = requested ? (lists.some(list => list.ref === requested) ? requested : '')
+      : lists.find(list => list.ref === remembered)?.ref || lists[0]?.ref || '';
     try { unit = localStorage.getItem(preferenceKey()) === 'oz' ? 'oz' : 'ml'; } catch (_) {}
     $('units').value = unit; updateScope();
-    if (current) await load();
+    if (current) {
+      if (offline) {
+        if (!restoreLog()) status('This log has not been saved on this device yet. Connect to Checky to open it.');
+      } else await load();
+    }
     else status('No baby list assigned. Ask your PocketBase admin to add you to a baby list.');
   }
   async function refreshLists() {
     const result = await api(apiRoot + '/lists'); lists = result.items;
+    for (const list of cache.read(user.id, 'baby-lists') || []) {
+      if (!lists.some(item => item.ref === list.ref)) cache.remove(user.id, 'baby-log:' + list.ref);
+    }
+    try { cache.write(user.id, 'baby-lists', lists); } catch (_) {}
+    renderLists();
+  }
+  function renderLists() {
     $('listPicker').replaceChildren();
     for (const list of lists) {
       const option = node('option', '', list.name); option.value = list.ref; $('listPicker').append(option);
@@ -157,6 +200,7 @@
   }
   function updateScope() {
     $('tracker').hidden = !activeList();
+    if (activeList()) { try { cache.write(user.id, 'baby-last-list', current); } catch (_) {} }
     $('listPicker').value = current;
     document.querySelector('h1').textContent = activeList()?.name || 'Baby tracker';
     const address = new URL(location.href);
@@ -233,6 +277,7 @@
       if (!deleting) entries.push(record);
       entries.sort((a, b) => b.entry.occurredAt.localeCompare(a.entry.occurredAt) || b.id.localeCompare(a.id));
       dirty = false; $('editor').close(); render();
+      try { saveLog(); } catch (_) {}
       try { await load(); status(deleting ? 'Entry deleted.' : 'Entry saved.'); }
       catch (error) {
         if ([401, 403, 404].includes(error.status)) fail(error);
@@ -310,7 +355,15 @@
   window.addEventListener('beforeunload', event => { if (dirty || saving) { event.preventDefault(); event.returnValue = ''; } });
   const refreshIfIdle = () => { if (user && current && !$('editor').open && !saving && !document.hidden) load().catch(fail); };
   window.addEventListener('online', refreshIfIdle);
+  window.addEventListener('offline', refreshIfIdle);
+  window.addEventListener('storage', () => {
+    if (user && cache.account() !== user.id) {
+      user = null; entries = []; $('entries').replaceChildren(); $('tracker').hidden = true;
+      $('editor').close(); $('login').hidden = false; status('Sign in to open your log.');
+    }
+  });
   document.addEventListener('visibilitychange', refreshIfIdle);
   setInterval(refreshIfIdle, 30000);
+  if ('serviceWorker' in navigator) void navigator.serviceWorker.register('./service-worker.js', { scope: './' }).catch(() => {});
   start().catch(fail);
 })();

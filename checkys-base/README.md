@@ -187,6 +187,14 @@ Sync tracks the server checklist version and the last synced checklist snapshot;
 
 Already accepted saves and navigation-only differences can catch up without another server write. The merged checklist is saved on the device so the next edit keeps the server's changes. Editing pauses during sync, and a pre-sync Safety copy remains available. If a conflict still needs review, export the local checklist before replacing it. Background saves retain their version checks; full reconciliation happens through the sync action, including the normal startup sync.
 
+### Offline lists
+
+After signing in online, Checky saves Personal/Shared navigation and checklist snapshots on this device. Previously loaded lists remain available when the network or server is unavailable, including after reopening the installed app. Switching lists preserves each list's unsynced edits and original sync version. The open checklist syncs on reconnection; reopen any other checklist you edited offline to sync its saved changes. Existing conflict checks still apply.
+
+Reopening Checky returns to the last-used Personal/Shared checklist or Baby log, including when the installed app starts from its home address. Each checklist remembers its selected tab on this device, separately for each account; syncing another device's active tab does not change that choice. Reminder links and explicit list links take precedence. If a saved tab or log is no longer available, Checky opens an available checklist instead. The standalone Baby page also remembers its last selected log.
+
+The optional Baby tracker saves log pages after loading them. Previously opened logs and their loaded history can be read offline; adding/editing entries and fetching earlier history need a connection. The Baby screen has its own versioned offline cache. Open Checky online after updating the Base and Baby web images so the new files and snapshots can be saved. Full offline reopening requires HTTPS (or localhost) and available browser storage. Signing out or a confirmed expired session requires signing in again; another account cannot open the previous account's cached lists. A confirmed access removal removes that list from offline navigation.
+
 ### Weekly checklist tabs
 
 Hold or right-click a checklist tab and choose **Set up weekly checklist**. Pick Sunday or Monday as the reset day, select the weekdays to show, set the reminder time, and save. **Edit week** reopens this setup. Setup reuses existing weekday rows and keeps other tasks in the tab. Deselecting a day hides it and stops its reminders.

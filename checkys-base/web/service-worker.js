@@ -9,6 +9,7 @@ const APP_SHELL = [
   "./auth-code-dialog.js?v=__CHECKY_BUILD__",
   "./checkys-base.js?v=__CHECKY_BUILD__",
   "./mobile-storage.js?v=__CHECKY_BUILD__",
+  "./offline-cache.js?v=__CHECKY_BUILD__",
   "./reminder-editor.js?v=__CHECKY_BUILD__",
   "./reminder-state.js?v=__CHECKY_BUILD__",
   "./reminder-check.js?v=__CHECKY_BUILD__",

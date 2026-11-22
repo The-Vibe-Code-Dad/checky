@@ -416,6 +416,17 @@ base:
 - Increased text contrast on Base and Baby tracker action buttons and kept the drawer opaque in system high-contrast mode.
 - Verified the main list, navigation, Settings, Done, Baby log and entry form with axe-core, keyboard/phone browser regressions, the full Baby tracker and installed-web/offline suites, and web build/cache checks. The guidance scan no longer flags the six unsafe Enter handlers.
 
+## v0086 - 2026-11-19
+- Kept Personal, Shared and Baby navigation available from account-scoped saved copies during network/server failures. Shared-list requests no longer turn a failed refresh into an empty folder.
+- Saved checklist snapshots per list, including unsynced drafts and their server versions, so offline switching/reopening preserves edits. Opening a saved draft online uses the existing sync/conflict checks; a full cache leaves the current draft open.
+- Added an independent Baby offline screen cache and saved log pages, including loaded history. Cached logs reopen offline with a clear notice; adding/editing Baby entries still requires a connection. Restored the selected Baby view after startup sync releases navigation. Confirmed sign-out, account changes and access removal gate cached data.
+- Passed 21 focused cache, sync, build and desktop security checks, plus the complete Baby tracker and installed-web update/offline browser suites against disposable PocketBase. Coverage includes account isolation, confirmed revocation, full-cache draft protection and loaded history pages. Changes are local source updates; no hosted deployment or installer publication was performed.
+
+## v0087 - 2026-11-19
+- Remember the last-used Baby log when reopening from the installed app's home address, online or offline. The standalone Baby page also keeps its last selected log; reminder and explicit list links take precedence.
+- Keep each checklist's selected tab as an account-scoped device preference, so startup sync and another device's active tab no longer reset it. Personal/Shared selection continues to use the existing per-account checklist preference. Removed tabs and inaccessible logs fall back to available checklist content.
+- Passed 21 focused cache, sync, build and desktop security checks and both full Baby/installed-web browser suites against disposable PocketBase. Added coverage for home-address reopening, per-list tabs, reminder/deep-link precedence, deleted tabs, standalone Baby selection, offline reopening, revoked saved logs and account-scoped preferences. Local source changes only; not deployed.
+
 ## v0088 - 2026-11-21
 - Fixed weekly checklist follow-ups alerting for earlier weekdays: each row can notify only on its own calendar day in the saved timezone, ending at local midnight or when checked. A weekly reset does not send a backlog.
 - Clarified the weekly reminder window in Edit week and the Base documentation. Added Saturday-evening, Sunday/Monday midnight, two-list, stale weekday and daylight-saving regressions across browser and backend schedulers.

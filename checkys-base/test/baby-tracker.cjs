@@ -9,6 +9,8 @@ const { once } = require('node:events');
 const { chromium } = require(process.env.CHECKY_PLAYWRIGHT_MODULE || 'playwright');
 const { buildWeb } = require('../scripts/build-web.cjs');
 const { buildAddon } = require('../addons/baby-tracker/build-web.cjs');
+const { checkOfflineLists } = require('./offline-lists-browser.cjs');
+const { checkLastUsed } = require('./last-used-browser.cjs');
 const addon = path.join(__dirname, '../addons/baby-tracker');
 const amounts = require('../addons/baby-tracker/web/amounts.js');
 const password = 'Disposable-Baby-Tracker-20261105!';
@@ -16,7 +18,7 @@ const seed = { occurredAt: '2026-11-05T12:30:00.000Z', breastMilkMl: 60, formula
 async function main() {
   if (!process.env.CHECKY_POCKETBASE_BINARY) throw Error('Set CHECKY_POCKETBASE_BINARY to the test binary.');
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'checky-baby-'));
-  let child, server, browser, log = '';
+  let child, server, browser, debugPage, log = '';
   const reserve = http.createServer();
   await new Promise(resolve => reserve.listen(0, '127.0.0.1', resolve));
   const port = reserve.address().port; await new Promise(resolve => reserve.close(resolve));
@@ -176,11 +178,14 @@ async function main() {
     const context = await browser.newContext({ viewport: { width: 1100, height: 900 }, hasTouch: true, timezoneId: 'America/New_York', locale: 'en-US' });
     await context.addInitScript(() => Object.defineProperty(crypto, 'randomUUID', { value: undefined }));
     const page = await context.newPage(), errors = []; page.on('pageerror', error => errors.push(error.message));
+    debugPage = page;
     await page.clock.setFixedTime(new Date('2026-11-05T17:00:00Z'));
     await page.goto(origin);
     await page.locator('#loginEmailInput').fill(users[0].email); await page.locator('#loginPasswordInput').fill(password); await page.locator('#loginSubmitBtn').click();
-    await page.locator('#loginOverlay').waitFor({ state: 'hidden' });
-    await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
+    await page.locator('#loginOverlay').waitFor({ state: 'hidden' }).catch(async error => {
+      console.error('Login status:', await page.locator('#loginOverlay').innerText(), 'Page errors:', errors); throw error;
+    });
+    await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !!state.ui.lastSyncedAt && !state.ui.syncInProgress);
     await page.locator('#navToggle').click();
     assert.equal(await page.locator('[data-addon-id="baby-tracker"]').count(), 0, 'Standard web installation has no Baby tracker');
     assert.equal(await page.locator('#enableBabyTracker').count(), 0, 'Installing is not a built-in Settings toggle');
@@ -207,8 +212,12 @@ async function main() {
     const tracker = page.frameLocator('#addonFrame');
     await tracker.locator('.entry').first().waitFor();
     await page.reload();
-    await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
-    await tracker.locator('.entry').first().waitFor();
+    await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !!state.ui.lastSyncedAt && !state.ui.syncInProgress);
+    await tracker.locator('.entry').first().waitFor().catch(async error => {
+      console.error('Baby reload:', await page.evaluate(() => ({ activeAddon, search: location.search,
+        frame: document.getElementById('addonFrame').src, status: document.getElementById('addonFrame').contentDocument?.getElementById('status')?.textContent })), errors);
+      throw error;
+    });
     await page.locator('#navToggle').click();
     await babyPin.waitFor({state:'visible'});
     await babyPin.click({button:'right'});
@@ -218,6 +227,7 @@ async function main() {
     await page.locator('#itemContextMenu').getByRole('button',{name:'Always show',exact:true}).click();
     await page.locator('#navCloseBtn').click();
     console.log('PASS Baby list hold menu, pin/unpin, collapsed-folder visibility, opening and reload persistence');
+    await checkLastUsed(page);
     assert.equal(new URL(page.url()).pathname, '/');
     assert.equal(await tracker.getByRole('link', {name:'Back to lists'}).count(), 0);
     assert.equal(await tracker.locator('#listPicker').inputValue(), ref);
@@ -306,6 +316,7 @@ async function main() {
     await tracker.getByText('Cannot reach Checky Base.', { exact: false }).waitFor();
     assert.equal(await tracker.locator('#pee').isChecked(), true);
     await context.setOffline(false); page.once('dialog', dialog => dialog.accept()); await tracker.locator('#cancel').click();
+    await checkOfflineLists(page, context);
     // Delete is explicit and persists after reloading.
     await tracker.locator('.entry').first().getByRole('button', { name: /Edit entry/ }).click();
     await tracker.locator('#deleteEntry').click(); await tracker.getByRole('button', { name: 'Confirm delete', exact: true }).click();
@@ -315,6 +326,9 @@ async function main() {
     // drafts when a caregiver declines to leave an unfinished entry.
     await tracker.locator('#addEntry').click(); await tracker.locator('#pee').check();
     await page.locator('#navToggle').click();
+    // The offline regression switched lists and reloaded; expand the current
+    // folder explicitly before exercising its tab's unsaved-entry guard.
+    await page.locator('[data-folder="shared"]').evaluate(element => { element.open = true; });
     page.once('dialog', dialog => dialog.dismiss());
     await babyPin.click();
     assert.equal(await tracker.locator('#editor').isVisible(), true, 'Pinned Baby navigation must preserve the unfinished-entry guard');
@@ -326,11 +340,15 @@ async function main() {
     await page.locator('#addonView').waitFor({state:'hidden'});
     assert.equal(new URL(page.url()).pathname, '/');
     assert.equal(new URL(page.url()).searchParams.has('addon'), false);
-    await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
+    await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !!state.ui.lastSyncedAt && !state.ui.syncInProgress);
     assert.equal((await req(endpoint + '?list=' + ref, 'GET', undefined, tokens[1])).items.length, 1);
     // A day can span two server pages. After midnight it should become a
     // closed folder, and refreshing it must include edits beyond page one.
     const historyPage = await context.newPage();
+    await historyPage.bringToFront();
+    historyPage.on('requestfailed', request => {
+      if (new URL(request.url()).pathname.startsWith('/api/')) console.log('History request failed:', new URL(request.url()).pathname, request.failure()?.errorText);
+    });
     await historyPage.clock.setFixedTime(new Date('2026-11-05T17:00:00Z'));
     await historyPage.goto(origin + '/baby/?list=' + encodeURIComponent(personal));
     await historyPage.locator('.today .entry').first().waitFor();
@@ -338,6 +356,20 @@ async function main() {
     await historyPage.locator('#loadMore').click();
     await historyPage.locator('#loadMore').waitFor({state:'hidden'});
     assert.equal(await historyPage.locator('.today .entry').count(), 52);
+    await context.setOffline(true);
+    await historyPage.reload();
+    await historyPage.getByText('Offline. Showing saved entries.', { exact: false }).waitFor();
+    assert.equal(await historyPage.locator('.today .entry').count(), 52, 'Offline history includes every page already loaded');
+    await historyPage.bringToFront();
+    await context.setOffline(false);
+    // Reconnection can be detected by either the online event or the existing
+    // 30-second foreground poll (for example when a tunnel recovers).
+    await historyPage.waitForFunction(() => !document.getElementById('addEntry').disabled, null, { timeout: 45000 }).catch(async error => {
+      console.error('History reconnect:', await historyPage.evaluate(() => ({ hidden: document.hidden, online: navigator.onLine,
+        status: document.getElementById('status').textContent, account: !!window.checkyOfflineCache.account(),
+        picker: document.getElementById('listPicker').value, lists: window.checkyOfflineCache.read(window.checkyOfflineCache.account(), 'baby-lists') })));
+      throw error;
+    });
     await historyPage.clock.setFixedTime(new Date('2026-11-06T05:01:00Z'));
     await historyPage.evaluate(() => window.dispatchEvent(new Event('online')));
     await historyPage.getByText('No entries today.').waitFor();
@@ -362,7 +394,7 @@ async function main() {
     await adminPage.locator('#loginEmailInput').fill('admin@baby.invalid');
     await adminPage.locator('#loginPasswordInput').fill(password); await adminPage.locator('#loginSubmitBtn').click();
     await adminPage.locator('#loginOverlay').waitFor({state:'hidden'});
-    await adminPage.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
+    await adminPage.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !!state.ui.lastSyncedAt && !state.ui.syncInProgress);
     await adminPage.locator('#navToggle').click();
     const adminFolder = adminPage.locator('[data-addon-id="baby-tracker"]');
     await adminPage.evaluate(() => loadInstalledAddons());
@@ -379,7 +411,7 @@ async function main() {
     await assigned.getByRole('heading',{name:independent.name,exact:true}).waitFor();
     assert.equal(await assigned.locator('#manageLists').count(),0);
     assert.equal(await assigned.locator('#listManager').count(),0);
-    assert.equal(await assigned.locator('#addEntry').isEnabled(),true);
+    await assigned.locator('#addEntry:not(:disabled)').waitFor();
     assert.equal(new URL(adminPage.url()).pathname,'/');
     await adminPage.locator('#navToggle').click();
     await adminFolder.getByRole('button',{name:independent.name,exact:true}).click({button:'right'});
@@ -397,6 +429,14 @@ async function main() {
     await adminPage.locator('#navToggle').click();
     await adminFolder.waitFor({state:'detached'});
     assert.equal(await adminPin.count(),0, 'Revoking list access also removes its visible shortcut');
+    await adminContext.setOffline(true);
+    await adminPage.goto(origin);
+    await adminPage.waitForFunction(() => typeof state !== 'undefined' && state.hostedSession.offline);
+    await adminPage.evaluate(() => loadInstalledAddons());
+    assert.equal(await adminPage.evaluate(() => activeAddon), null, 'A revoked remembered Baby view must fall back to the checklist');
+    await adminPage.goto(origin + '/baby/?list=' + encodeURIComponent(independentRef));
+    await adminPage.getByText('No baby list assigned.', {exact:false}).waitFor();
+    assert.equal(await adminPage.locator('#tracker').isVisible(), false, 'Confirmed revocation must also block offline access');
     assert.equal((await req(listEndpoint,'GET',undefined,tokens[2])).items[0].name,'Renamed in PocketBase');
     await req(listRecords + '/' + independent.id,'PATCH',{members:[]},admin.token);
     await req(endpoint + '?list=' + independentRef,'GET',undefined,tokens[2],404);
@@ -414,7 +454,7 @@ async function main() {
     await req('/api/checkys-base/baby/status', 'GET', undefined, tokens[0], 404);
     const retained = await req('/api/collections/checky_baby_entries/records/' + created.id, 'GET', undefined, admin.token);
     assert.equal(retained.data.formulaMl, 30);
-    await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
+    await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !!state.ui.lastSyncedAt && !state.ui.syncInProgress);
     await page.locator('#navToggle').click();
     assert.equal(await page.locator('[data-addon-id="baby-tracker"]').count(), 0, 'Mismatched web-only add-on must not appear');
     assert.equal(await page.locator('#alwaysVisibleTabs .addon-link').count(),0, 'Uninstalled add-ons must not leave active shortcuts');
@@ -424,7 +464,7 @@ async function main() {
     await stopBackend(); await startBackend(true);
     await fs.rename(path.join(dir, 'removed-addon-web'), path.join(root, 'baby'));
     await fs.copyFile(path.join(addon, 'addons.json'), path.join(root, 'addons.json'));
-    await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !state.ui.syncInProgress);
+    await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && !!state.currentChecklistId && !!state.ui.lastSyncedAt && !state.ui.syncInProgress);
     await page.locator('#navToggle').click(); await page.locator('[data-addon-id="baby-tracker"]').waitFor({state:'visible'});
     assert.equal(await babyPin.isVisible(),true, 'Reinstalling an assigned add-on restores the saved shortcut');
     assert.equal((await req(endpoint + '?list=' + ref, 'GET', undefined, tokens[0])).items[0].id, created.id);
@@ -433,7 +473,14 @@ async function main() {
     console.log('PASS separate install, removal and reinstall retain the same database, users, lists and baby entries');
     assert.deepEqual(errors, []);
     console.log('PASS installed add-on navigation, timestamp edits, precise ml/oz, notes/checkboxes, reload, phone layout, XSS-safe text, offline draft, concurrent edits, integrated navigation, unsaved-entry guard, deletion and independent access revocation');
-  } catch (error) { console.error(log.slice(-7000)); throw error; }
+  } catch (error) {
+    if (debugPage && !debugPage.isClosed()) console.error('Browser failure:', await debugPage.evaluate(() => ({
+      view: typeof activeAddon === 'undefined' ? null : activeAddon, url: location.href,
+      frame: document.getElementById('addonFrame')?.src,
+      body: document.getElementById('addonFrame')?.contentDocument?.body?.innerText.slice(0, 2000)
+    })).catch(() => null));
+    console.error(log.slice(-7000)); throw error;
+  }
   finally {
     await browser?.close(); if (server) await new Promise(resolve => server.close(resolve));
     if (child && child.exitCode === null) { child.kill('SIGTERM'); await once(child, 'exit'); }

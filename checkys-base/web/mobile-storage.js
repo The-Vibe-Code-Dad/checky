@@ -503,6 +503,8 @@
     return {
       checklist: !hostedSession || (hostedSession.user?.id && readSyncMeta().userId === hostedSession.user.id)
         ? getCachedChecklist() : cloneValue(DEFAULT_CHECKLIST),
+      currentChecklistId: !hostedSession || (hostedSession.user?.id && readSyncMeta().userId === hostedSession.user.id)
+        ? readSyncMeta().recordId : "",
       settings,
       dataLocation: getDataLocationDescription(settings),
       syncRestorePoint: getSyncRestorePointInfo(),
@@ -665,24 +667,24 @@
     }
 
     const requestUrl = buildApiUrl(credentials.serverUrl, path, query);
-    let response;
+    let response, payload;
     try {
       response = await fetch(requestUrl, {
         method,
         headers,
-        signal,
+        signal: signal || (globalThis.AbortSignal?.timeout ? AbortSignal.timeout(method === 'GET' ? 10000 : 30000) : undefined),
         cache: path === HOSTED_SESSION_PATH ? "no-store" : undefined,
         body: body === undefined ? undefined : JSON.stringify(body),
         credentials: isHostedWebRuntime() ? "same-origin" : "omit"
       });
+      payload = await readResponsePayload(response);
     } catch (fetchError) {
       const error = new Error(getNetworkRequestErrorMessage(credentials.serverUrl, errorMessage));
-      error.isNetworkError = true;
+      error.status = response?.status >= 400 ? response.status : undefined;
+      error.isNetworkError = !error.status;
       error.cause = fetchError;
       throw error;
     }
-    const payload = await readResponsePayload(response);
-
     if (response.ok) {
       return payload;
     }
@@ -732,6 +734,7 @@
       throw new Error("The server did not return a hosted session.");
     }
     if (!result.authenticated) localStorage.setItem(OFFLINE_LOCK_KEY, "1");
+    window.checkyOfflineCache?.session(result);
     return {
       authenticated: result.authenticated,
       setupRequired: !!result?.setupRequired,
@@ -767,7 +770,11 @@
     // Existing installs already store the account and record ID with each synced checklist.
     const meta = readSyncMeta();
     const saved = readJson(CHECKLIST_KEY, null);
-    if (!localStorage.getItem(OFFLINE_LOCK_KEY) && meta.userId && meta.recordId && Array.isArray(saved?.tabs)) {
+    const cache = window.checkyOfflineCache;
+    const browser = cache?.read(meta.userId, 'checklists');
+    const available = !browser || browser.items.some(item => item.id === meta.recordId);
+    if (!localStorage.getItem(OFFLINE_LOCK_KEY) && (!cache || cache.account() === meta.userId) &&
+        available && meta.userId && meta.recordId && Array.isArray(saved?.tabs)) {
       return { authenticated: false, unavailable: true, offline: true, recordId: meta.recordId, user: { id: meta.userId } };
     }
     return { authenticated: false, unavailable: true };
@@ -1430,8 +1437,8 @@
       userRecord,
       USER_DEFAULT_CHECKLIST_FIELD,
       PERSONAL_CHECKLIST_COLLECTION
-    ) || await findPersonalChecklistRecord(credentials, auth).catch(() => null);
-    const sharedRecords = await listAccessibleSharedChecklistRecords(credentials, auth).catch(() => []);
+    ) || await findPersonalChecklistRecord(credentials, auth);
+    const sharedRecords = await listAccessibleSharedChecklistRecords(credentials, auth);
 
     const seen = new Set();
     const records = [];
@@ -1448,11 +1455,11 @@
     sharedRecords.forEach((record) => appendRecord(record));
 
     if (assignedChecklistId && !seen.has(assignedChecklistId)) {
-      appendRecord(await tryFetchChecklistRecordById(credentials, auth, assignedChecklistId).catch(() => null));
+      appendRecord(await tryFetchChecklistRecordById(credentials, auth, assignedChecklistId));
     }
 
     if (preferredChecklistId && !seen.has(preferredChecklistId)) {
-      appendRecord(await tryFetchChecklistRecordById(credentials, auth, preferredChecklistId).catch(() => null));
+      appendRecord(await tryFetchChecklistRecordById(credentials, auth, preferredChecklistId));
     }
 
     const effectivePreferredChecklistId = preferredChecklistId && seen.has(preferredChecklistId)
@@ -1481,6 +1488,30 @@
       message = `${items.length} accessible checklist${items.length === 1 ? "" : "s"} loaded.`;
     }
 
+    // A complete, authorized listing replaces the navigation snapshot. A network
+    // failure above must not turn into a successful empty Shared folder.
+    const cache = window.checkyOfflineCache;
+    if (isHostedWebRuntime() && cache) {
+      const previous = cache.read(auth.userId, 'checklists');
+      for (const item of previous?.items || []) {
+        if (!seen.has(item.id)) cache.remove(auth.userId, 'checklist:' + item.id);
+      }
+      try {
+        // Persist the authorized list before optional full snapshots; a quota
+        // failure while warming a large list must not restore removed access.
+        cache.write(auth.userId, 'checklists', { items, assignedChecklistId, currentChecklistId });
+        for (const record of records) {
+          const ref = getChecklistRef(record);
+          const saved = cache.read(auth.userId, 'checklist:' + ref);
+          if (saved?.meta?.dirty) continue;
+          const checklist = cloneValue(extractChecklistData(record));
+          cache.write(auth.userId, 'checklist:' + ref, { checklist, meta: {
+            userId: auth.userId, recordId: ref, version: getChecklistRecordVersion(record),
+            baseChecklist: checklist, dirty: false
+          } });
+        }
+      } catch (_) { /* Optional offline copies must not interrupt online use. */ }
+    }
     return {
       items,
       assignedChecklistId,
@@ -1497,8 +1528,48 @@
     ));
   }
 
+  function cachedChecklistBrowser(settings) {
+    if (!isHostedWebRuntime()) return null;
+    const cache = window.checkyOfflineCache, userId = cache?.account();
+    const browser = cache?.read(userId, 'checklists');
+    if (!browser) return null;
+    const meta = readSyncMeta();
+    return { ok: true, offline: true, checklists: browser.items,
+      assignedChecklistId: browser.assignedChecklistId,
+      currentChecklistId: meta.userId === userId ? meta.recordId : browser.currentChecklistId,
+      settings, dataLocation: syncContextApi.describeDataLocation(settings),
+      message: 'Offline. Showing lists saved on this device.' };
+  }
+
+  function preserveCurrentChecklist(checklist) {
+    if (!isHostedWebRuntime() || !window.checkyOfflineCache) return;
+    const meta = readSyncMeta();
+    if (!meta.recordId || meta.userId !== window.checkyOfflineCache.account()) return;
+    meta.dirty = meta.dirty || (!!meta.baseChecklist && getChecklistSignature(checklist) !== getChecklistSignature(meta.baseChecklist));
+    // Required before changing the active slot: a full disk must leave the
+    // current draft open, not discard it while switching lists.
+    window.checkyOfflineCache.write(meta.userId, 'checklist:' + meta.recordId, { checklist, meta });
+  }
+
+  function openCachedChecklist(ref, settings) {
+    const browser = cachedChecklistBrowser(settings);
+    const cache = window.checkyOfflineCache;
+    const saved = cache?.read(cache.account(), 'checklist:' + ref);
+    if (!browser?.checklists.some(item => item.id === ref) || !saved?.checklist ||
+        saved.meta?.recordId !== ref || saved.meta?.userId !== cache.account()) return null;
+    writeJson(CHECKLIST_KEY, saved.checklist);
+    writeSyncMeta({ ...saved.meta, preferredChecklistId: ref });
+    rememberLastChecklistSelection(saved.meta.userId, ref);
+    return { ...browser, currentChecklistId: ref, checklist: saved.checklist,
+      syncRestorePoint: getSyncRestorePointInfo() };
+  }
+
   async function browseAccessibleChecklists() {
     const { settings, credentials } = await syncContextApi.load();
+    if (offlineView || globalThis.navigator?.onLine === false) {
+      const saved = cachedChecklistBrowser(settings);
+      if (saved) return saved;
+    }
     if (!syncContextApi.hasCredentials(credentials)) {
       return {
         ok: false,
@@ -1534,6 +1605,10 @@
         message: browser.message
       };
     } catch (error) {
+      if (error.isNetworkError || error.status >= 500 || error.status === 408 || error.status === 429) {
+        const saved = cachedChecklistBrowser(settings);
+        if (saved) return saved;
+      }
       return {
         ok: false,
         checklists: [],
@@ -1584,11 +1659,23 @@
       await remoteSyncApi.settleQueue();
       const localChecklist = getCurrentChecklistForSync(currentChecklist);
       saveSyncRestorePoint(localChecklist, "switch_checklist");
+      preserveCurrentChecklist(localChecklist);
+
+      if (offlineView || globalThis.navigator?.onLine === false) {
+        const saved = openCachedChecklist(safeChecklistId, settings);
+        if (saved) return saved;
+        throw new Error('This list has not been saved on this device yet. Connect to Checky to open it.');
+      }
 
       const auth = await authApi.getContext(credentials);
       const userRecord = await fetchCurrentUserRecord(credentials, auth);
       const assignedChecklistId = getAssignedChecklistId(userRecord);
       const selectedRecord = await fetchChecklistRecordById(credentials, auth, safeChecklistId);
+      const pending = window.checkyOfflineCache?.read(auth.userId, 'checklist:' + safeChecklistId);
+      if (pending?.meta?.dirty) {
+        const saved = openCachedChecklist(safeChecklistId, settings);
+        if (saved) return { ...saved, offline: false, message: 'Opened saved changes. Syncing when connected.' };
+      }
       const selectedChecklistId = getChecklistRef(selectedRecord);
       const preferredChecklistId = selectedChecklistId && selectedChecklistId !== assignedChecklistId
         ? selectedChecklistId
@@ -1625,6 +1712,10 @@
           : `This device will follow ${getChecklistRecordLabel(selectedRecord)} again.`
       };
     } catch (error) {
+      if (error.isNetworkError || error.status >= 500 || error.status === 408 || error.status === 429) {
+        const saved = openCachedChecklist(safeChecklistId, settings);
+        if (saved) return saved;
+      }
       return {
         ok: false,
         isError: true,
@@ -2107,7 +2198,8 @@
       };
     },
     async syncNow(currentChecklist, options) {
-      return await remoteSyncApi.syncNow(currentChecklist, options);
+      const result = await remoteSyncApi.syncNow(currentChecklist, options);
+      return result.ok ? { ...result, currentChecklistId: readSyncMeta().recordId } : result;
     }
   };
 })();
