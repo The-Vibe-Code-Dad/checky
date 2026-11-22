@@ -221,9 +221,9 @@
     });
   }
 
-  function setChecked(item, checked, now = Date.now()) {
+  function setChecked(item, checked, now = Date.now(), skipToday = false) {
     const stamp = checked ? new Date(now).toISOString() : null;
-    Object.assign(item, { done: checked, completedAt: stamp, reminderCheckedAt: stamp, reminderSkipToday: false, reminderResetAt: null, weeklyArchivedAt: null });
+    Object.assign(item, { done: checked, completedAt: stamp, reminderCheckedAt: stamp, reminderSkipToday: checked && skipToday === true, reminderResetAt: null, weeklyArchivedAt: null });
   }
   function archivedThisWeek(item, schedule, now = Date.now()) {
     const at = Date.parse(item.weeklyArchivedAt);

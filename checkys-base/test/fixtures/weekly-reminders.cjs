@@ -11,6 +11,13 @@ function weeklyCase(day, now, expected, overrides = {}, resetDay = 0) {
 }
 const cases = [];
 for (const resetDay of [0, 1]) {
+  const earlyCheck = { done: true, reminderCheckedAt: '2026-11-21T22:00:00Z', reminderSkipToday: true };
+  cases.push(
+    weeklyCase(6, '2026-11-21T23:30:00Z', null, earlyCheck, resetDay),
+    weeklyCase(6, '2026-11-21T23:55:00Z', null, earlyCheck, resetDay),
+    weeklyCase(6, '2026-11-28T23:30:00Z', '2026-11-28T23:30:00Z', earlyCheck, resetDay),
+    weeklyCase(6, '2026-11-21T23:30:00Z', '2026-11-21T23:30:00Z', { done: false, reminderCheckedAt: null, reminderSkipToday: false }, resetDay)
+  );
   for (let day = 0; day < 7; day++) {
     // Saturday evening: only Saturday can follow up, even though UTC is Sunday.
     cases.push(weeklyCase(day, '2026-11-22T02:46:00Z', day === 6 ? '2026-11-22T02:25:00Z' : null, {}, resetDay));

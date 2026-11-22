@@ -1735,21 +1735,28 @@ function renderTabs() {
 async function changeItemCheck(tabId, itemId, checked) {
   const reminder = window.checkyReminderState;
   const checklistId = state.currentChecklistId;
-  const findItem = () => state.data.tabs.find(tab => tab.id === tabId)?.items.find(item => item.id === itemId);
+  const findTab = () => state.data.tabs.find(tab => tab.id === tabId);
+  const findItem = () => findTab()?.items.find(item => item.id === itemId);
   const item = findItem();
   if (!item) return;
   const now = Date.now(), identity = reminder.identity(item);
+  const schedule = window.checkyWeekly.normalize(findTab().weeklyChecklist);
+  const weekly = !!schedule?.itemIds.includes(itemId);
+  const weeklyIdentity = JSON.stringify(findTab().weeklyChecklist);
   let skipToday = false;
   if (checked && reminder.hasReminderLaterToday(item, now)) {
-    skipToday = await window.checkyConfirmEarlyCheck(item);
+    skipToday = await window.checkyConfirmEarlyCheck(item, { weekly });
     // Sync can replace a checklist while the dialog is open. Never apply an
     // answer to a different list, changed schedule or newer completion.
     const current = findItem();
-    if (skipToday === null || checklistId !== state.currentChecklistId || !current || reminder.identity(current) !== identity) {
+    if (skipToday === null || checklistId !== state.currentChecklistId || !current || reminder.identity(current) !== identity ||
+        JSON.stringify(findTab().weeklyChecklist) !== weeklyIdentity ||
+        (weekly && window.checkyWeekly.weekStart(Date.now(), schedule) !== window.checkyWeekly.weekStart(now, schedule))) {
       refreshRepeatingCheckboxes(); return;
     }
   }
-  reminder.setChecked(findItem(), checked, now, skipToday);
+  if (weekly) window.checkyWeekly.setChecked(findItem(), checked, now, skipToday);
+  else reminder.setChecked(findItem(), checked, now, skipToday);
   persistChecklistImmediately();
   refreshRepeatingCheckboxes();
 }
@@ -1780,10 +1787,7 @@ async function editWeeklyTab(tabId) {
 
 function renderWeeklyRows(tab) {
   return window.checkyWeekly.renderRows(els.list, tab, () => editWeeklyTab(tab.id), (id, checked) => {
-    const current = state.data.tabs[state.data.active]?.items.find(item => item.id === id);
-    if (!current) return;
-    window.checkyWeekly.setChecked(current, checked);
-    persistChecklistImmediately();
+    void changeItemCheck(tab.id, id, checked);
   }, (index, x, y) => openItemContextMenu(state.data.active, index, x, y));
 }
 

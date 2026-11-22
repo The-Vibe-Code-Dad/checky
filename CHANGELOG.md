@@ -435,6 +435,11 @@ base:
 - Removed local-only agent instruction files and personal deployment references from public branch and tag history.
 - Updated the signed hosted desktop download to the verified 2.0.1 Windows installer.
 
+## v0093 - 2026-11-22
+- Restored the early-reminder confirmation for weekly checklist rows. Cancel or Escape leaves the day unchecked; Skip saves completion and stops that day's reminder and follow-ups until the normal weekly reset.
+- Used native dialog form actions with safe initial focus and browser-managed dismissal. Delayed answers cannot apply to a changed weekly setup or a different week.
+- Added touch and keyboard browser regressions, saved-choice checks, independent-list coverage and shared browser/backend schedule cases for cancellation, follow-ups and the next week.
+
 desktop:
 
 ## v0001 - 2026-04-07
@@ -599,6 +604,9 @@ desktop:
 ## v0046 - 2026-11-21
 - Published desktop 2.0.1 for Windows, macOS and Linux after platform tests and installer verification. Added the signed Windows update manifest.
 - Retired the superseded 2.0.0 public release containing the former personal server default.
+
+## v0047 - 2026-11-22
+- Kept weekly early-check confirmation, cancellation and saved skip choices compatible with Base while preserving the weekly reset and next-week reminders.
 
 pocketbase:
 
