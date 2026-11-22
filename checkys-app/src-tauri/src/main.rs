@@ -32,7 +32,7 @@ struct Preferences {
 impl Default for Preferences {
     fn default() -> Self {
         Self {
-            site: "https://example.domain".into(),
+            site: String::new(),
             shortcut: "CmdOrCtrl+Space".into(),
             local: false,
             always_on_top: true,
@@ -73,6 +73,14 @@ fn site_url(value: &str) -> Result<Url> {
         );
     }
     Ok(url)
+}
+
+fn workspace_origin(settings: &Preferences) -> Result<Option<Url>> {
+    if settings.local {
+        Ok(None)
+    } else {
+        site_url(&settings.site).map(Some)
+    }
 }
 
 fn app_url(url: &Url) -> bool {
@@ -134,7 +142,9 @@ fn read_preferences(app: AppHandle) -> Result<DesktopState> {
 }
 #[tauri::command]
 async fn save_preferences(app: AppHandle, mut settings: Preferences, startup: bool) -> Result<()> {
-    settings.site = site_url(&settings.site)?.origin().ascii_serialization();
+    if !settings.local {
+        settings.site = site_url(&settings.site)?.origin().ascii_serialization();
+    }
     if settings.shortcut.len() > 80 {
         return Err("Shortcut is too long.".into());
     }
@@ -206,7 +216,7 @@ async fn save_preferences(app: AppHandle, mut settings: Preferences, startup: bo
 
 fn workspace(app: &AppHandle) -> Result<()> {
     let settings = read_preferences(app.clone())?.settings;
-    let origin = site_url(&settings.site)?;
+    let origin = workspace_origin(&settings)?;
     let mut hash = DefaultHasher::new();
     settings.site.hash(&mut hash);
     let label = if settings.local {
@@ -224,6 +234,7 @@ fn workspace(app: &AppHandle) -> Result<()> {
         let url = if local {
             WebviewUrl::App("index.html".into())
         } else {
+            let origin = origin.as_ref().ok_or("Enter your Checky server address.")?;
             app.add_capability(
                 CapabilityBuilder::new(format!("notify-{label}"))
                     .local(false)
@@ -235,13 +246,16 @@ fn workspace(app: &AppHandle) -> Result<()> {
             WebviewUrl::External(origin.clone())
         };
         let handle = app.clone();
-        let check_origin = origin.origin();
+        let check_origin = origin.as_ref().map(Url::origin);
         let guard = if local {
             "['tauri://localhost','http://tauri.localhost','https://tauri.localhost'].includes(location.origin) || location.protocol === 'tauri:'" .into()
         } else {
             format!(
                 "location.origin === {}",
-                serde_json::to_string(&origin.origin().ascii_serialization()).map_err(error)?
+                serde_json::to_string(
+                    &origin.as_ref().ok_or("Enter your Checky server address.")?
+                        .origin().ascii_serialization()
+                ).map_err(error)?
             )
         };
         let init = format!("if (window === window.top && ({guard})) {{ window.checkyDesktop = Object.freeze({{local:{local}, preferences:()=>location.assign('https://checky-desktop.invalid/preferences'), notify:body=>window.__TAURI__.core.invoke('desktop_notify',{{body}})}}); }}");
@@ -263,7 +277,7 @@ fn workspace(app: &AppHandle) -> Result<()> {
                 if local {
                     app_url(next)
                 } else {
-                    next.origin() == check_origin
+                    Some(next.origin()) == check_origin
                 }
             })
             .build()
@@ -469,6 +483,18 @@ fn main() {
 mod tests {
     use super::*;
     #[test]
+    fn fresh_install_requires_a_server_or_local_mode() {
+        let mut settings = Preferences::default();
+        assert!(settings.site.is_empty());
+        assert!(workspace_origin(&settings).is_err());
+        settings.local = true;
+        assert!(workspace_origin(&settings).unwrap().is_none());
+        settings.local = false;
+        settings.site = "https://example.domain".into();
+        assert!(workspace_origin(&settings).unwrap().is_some());
+    }
+
+    #[test]
     fn server_addresses() {
         for url in [
             "https://example.domain",
@@ -479,7 +505,7 @@ mod tests {
         }
         for url in [
             "file:///tmp/x",
-            "http://example.com",
+            "http://example.domain",
             "https://user@a.com",
             "https://a.com/path",
             "https://a.com/?x",

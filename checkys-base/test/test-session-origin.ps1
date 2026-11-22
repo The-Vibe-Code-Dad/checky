@@ -10,7 +10,7 @@ if (-not $SkipBuild) {
   if ($LASTEXITCODE -ne 0) { throw 'PocketBase image build failed.' }
 }
 try {
-  foreach ($origin in @('', 'https://checky.example.com', 'https://CHECKY.EXAMPLE.COM:443/', 'http://checky.example.com:17760', 'https://checky.example.com/invalid')) {
+  foreach ($origin in @('', 'https://example.domain', 'https://EXAMPLE.DOMAIN:443/', 'http://example.domain:17760', 'https://example.domain/invalid')) {
     $containerName = 'checky-origin-' + [Guid]::NewGuid().ToString('N').Substring(0, 12)
     try {
       & docker run --detach --name $containerName --publish '127.0.0.1::8080' --tmpfs '/pb/pb_data:rw,size=268435456' --memory 512m --cpus 2 --env "CHECKY_PUBLIC_ORIGIN=$origin" $imageName

@@ -62,7 +62,7 @@ function checkCookie(value) {
   } else {
     // Reproduces an HTTPS browser behind an untrusted HTTP tunnel before configuration.
     const tunnel = await request('/api/checkys-base/session/login', {token}, {
-      Origin: 'https://checky.example.com', Host: 'checky.example.com', 'X-Forwarded-Proto': 'http'
+      Origin: 'https://example.domain', Host: 'example.domain', 'X-Forwarded-Proto': 'http'
     });
     assert.equal(tunnel.status, 403);
     assert.match(tunnel.data.message, /Cross-origin session request rejected/);

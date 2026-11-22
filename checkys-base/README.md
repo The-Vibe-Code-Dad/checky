@@ -163,7 +163,7 @@ Edit it to use your browser-facing domain:
 
 ```json
 {
-  "publicOrigin": "https://checky.example.com",
+  "publicOrigin": "https://example.domain",
   "pushSubject": "",
   "remindersEnabled": true
 }
@@ -240,7 +240,7 @@ The integration runner creates and removes its own disposable database under the
 If the browser uses HTTPS but the tunnel connects to Base over HTTP, set the public browser URL in `checkys-base/.env`:
 
 ```dotenv
-CHECKY_PUBLIC_ORIGIN=https://checky.example.com
+CHECKY_PUBLIC_ORIGIN=https://example.domain
 ```
 
 Use your actual domain, including a port only if the browser URL uses a nonstandard port. Keep the tunnel pointed at the **web** service on port `17760` (or `web:80` on its Docker network), so the app and `/api` share one origin. Deploy the updated sources with `bash scripts/update-base.sh` or the Windows updater below. If only changing this environment setting after deploying the updated code, run `docker compose up -d pocketbase` to recreate the backend with it.

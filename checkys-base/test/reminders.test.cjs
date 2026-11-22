@@ -19,7 +19,7 @@ test('push transport accepts browser endpoints and rejects SSRF, credentials and
   assert.throws(() => validateSubscription({ ...subscription(), keys: { p256dh: 'bad', auth: 'bad' } }));
 });
 test('push contact uses the deployment config, with environment overrides', () => {
-  assert.equal(subject({ publicOrigin: 'https://checky.example.com' }, {}), 'https://checky.example.com');
+  assert.equal(subject({ publicOrigin: 'https://example.domain' }, {}), 'https://example.domain');
   assert.equal(subject({ pushSubject: 'mailto:owner@example.com' }, {}), 'mailto:owner@example.com');
   assert.equal(subject({}, { CHECKY_PUBLIC_ORIGIN: 'https://override.example.com' }), 'https://override.example.com');
   assert.throws(() => subject({ publicOrigin: 'http://192.168.1.5' }, {}));
@@ -36,7 +36,7 @@ test('scheduler selects due active items and excludes future, completed, stale a
 });
 test('service worker displays push after all app windows close and restricts notification links to this origin', async () => {
   const handlers = {}, shown = [], opened = [];
-  const context = { URL, self: { location: { origin: 'https://checky.example.com' }, addEventListener: (name, handler) => { handlers[name] = handler; },
+  const context = { URL, self: { location: { origin: 'https://example.domain' }, addEventListener: (name, handler) => { handlers[name] = handler; },
     registration: { showNotification: async (...args) => shown.push(args) },
     clients: { matchAll: async () => [], openWindow: async url => opened.push(url) } } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../web/service-worker.js'), 'utf8'), context);
@@ -52,7 +52,7 @@ test('service worker displays push after all app windows close and restricts not
   for (const asset of [notice.icon, notice.badge]) assert.ok(fs.existsSync(path.join(__dirname, '../web', asset)));
   handlers.notificationclick({ notification: { close() {}, data: shown[0][1].data }, waitUntil: promise => { pending = promise; } });
   await pending;
-  assert.equal(opened[0], 'https://checky.example.com/?reminder=checklists:123');
+  assert.equal(opened[0], 'https://example.domain/?reminder=checklists:123');
   handlers.notificationclick({ notification: { close() {}, data: { url: 'https://evil.example/' } }, waitUntil() { throw Error('External link must be rejected'); } });
 });
 module.exports = { subscription };

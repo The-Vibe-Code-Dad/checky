@@ -50,7 +50,7 @@ test('worker waits for a complete shell, preserves unrelated caches and never ca
     addAll: async requests => { assert.ok(requests.every(r => r.cache === 'reload')); if (fail) throw Error('download failed'); complete = true; },
     match: async key => new Response(key === './index.html?v=__CHECKY_BUILD__' ? entry : 'cached shell')
   };
-  const self = { location: { origin: 'https://checky.example.com', href: 'https://checky.example.com/service-worker.js' },
+  const self = { location: { origin: 'https://example.domain', href: 'https://example.domain/service-worker.js' },
     addEventListener: (type, handler) => { handlers[type] = handler; },
     skipWaiting: async () => { assert.ok(complete); skipped = true; }, clients: { claim: async () => {} } };
   vm.runInNewContext(await fs.readFile(path.join(__dirname, '../web/service-worker.js'), 'utf8'), {

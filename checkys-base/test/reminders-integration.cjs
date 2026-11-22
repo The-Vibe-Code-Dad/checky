@@ -306,7 +306,7 @@ routerAdd('POST', '/api/checky-test/reminders/next', (e) => e.json(200, {results
     assert.deepEqual(deliveriesAfter.map(send => send.payload.body), ['deliverable', 'deliverable']);
     assert.deepEqual(deliveriesAfter.map(send => send.subscription.endpoint).sort(), endpoints.sort());
     console.log('PASS a malformed legacy reminder is skipped and both subscribers receive the next reminder');
-    config.publicOrigin = 'https://checky.example.com';
+    config.publicOrigin = 'https://example.domain';
     await fs.writeFile(configFile, JSON.stringify(config));
     assert.equal((await req('/api/checkys-base/session/login', 'POST', { token: login.data.token }, { Origin: base })).status, 403);
     const httpsLogin = await req('/api/checkys-base/session/login', 'POST', { token: login.data.token }, { Origin: config.publicOrigin });

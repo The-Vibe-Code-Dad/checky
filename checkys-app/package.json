@@ -1,7 +1,7 @@
 {
   "name": "checkys-app",
   "productName": "Checky's List",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Checky web app with a native global shortcut and tray",
   "author": "BTF",
   "license": "MIT",

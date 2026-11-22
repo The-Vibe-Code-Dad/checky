@@ -27,7 +27,7 @@ android:
 - Stopped hosted login from overwriting the submitted email with stale hidden Advanced form values.
 
 ## v0006 - 2026-04-08
-- Aligned Android server URL normalization with desktop so bare hostnames like `checky.example.com` default to `https://` in both the web source and checked-in native asset copy.
+- Aligned Android server URL normalization with desktop so bare hostnames like `example.domain` default to `https://` in both the web source and checked-in native asset copy.
 
 ## v0007 - 2026-04-08
 - Renamed the Android app branding to `Checky's List`, updated the checked-in native asset copy to match, and moved the tracked project folder to `checkys-android`.
@@ -428,6 +428,9 @@ base:
 ## v0090 - 2026-11-21
 - Removed local agent instructions from the public repository and replaced machine-specific release paths in the READMEs with generic examples. Kept the local working instructions and existing ignore rules.
 
+## v0091 - 2026-11-21
+- Standardized public server examples and matching test fixtures on example.domain.
+
 desktop:
 
 ## v0001 - 2026-04-07
@@ -584,6 +587,10 @@ desktop:
 
 ## v0044 - 2026-11-21
 - Kept the desktop weekly scheduler and Edit week explanation aligned with Base: weekday follow-ups stop at the end of their local day. The native desktop bundle continues to use canonical Base web source.
+
+## v0045 - 2026-11-21
+- Removed the personal hosted address from desktop defaults and test fixtures. Fresh installations require an explicit server address or local mode; local mode no longer requires a server URL.
+- Prepared desktop 2.0.1 with regression coverage for empty hosted settings and local workspace selection. Server examples use example.domain and agent instruction files are ignored regardless of capitalization.
 
 pocketbase:
 
